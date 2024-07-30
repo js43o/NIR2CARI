@@ -204,7 +204,7 @@ if __name__ == "__main__":
         )
         if not os.path.exists(args.output_path):
             os.makedirs(args.output_path)
-        
+        """ 
         if args.video:
             cropname = os.path.join(args.output_path, basename + "_input.mp4")
             savename = os.path.join(
@@ -315,66 +315,69 @@ if __name__ == "__main__":
             videoWriter.release()
             videoWriter2.release()
             video_cap.release()
+"""
+        cropname = os.path.join(args.output_path, basename + "_input.jpg")
+        savename = os.path.join(
+            args.output_path, basename + "_vtoonify_" + args.backbone[0] + ".jpg"
+        )
 
-        else:
-            cropname = os.path.join(args.output_path, basename + "_input.jpg")
-            savename = os.path.join(
-                args.output_path, basename + "_vtoonify_" + args.backbone[0] + ".jpg"
-            )
+        frame = cv2.imread(filename)
+        print(filename)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-            frame = cv2.imread(filename)
-            print(filename)
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        # We detect the face in the image, and resize the image so that the eye distance is 64 pixels.
+        # Centered on the eyes, we crop the image to almost 400x400 (based on args.padding).
+        if args.scale_image:
+            paras = get_video_crop_parameter(frame, landmarkpredictor, args.padding)
+            if paras is not None:
+                h, w, top, bottom, left, right, scale = paras
+                H, W = int(bottom - top), int(right - left)
+                # for HR image, we apply gaussian blur to it to avoid over-sharp stylization results
+                if scale <= 0.75:
+                    frame = cv2.sepFilter2D(frame, -1, kernel_1d, kernel_1d)
+                if scale <= 0.375:
+                    frame = cv2.sepFilter2D(frame, -1, kernel_1d, kernel_1d)
+                frame = cv2.resize(frame, (w, h))[top:bottom, left:right]
 
-            # We detect the face in the image, and resize the image so that the eye distance is 64 pixels.
-            # Centered on the eyes, we crop the image to almost 400x400 (based on args.padding).
-            if args.scale_image:
-                paras = get_video_crop_parameter(frame, landmarkpredictor, args.padding)
-                if paras is not None:
-                    h, w, top, bottom, left, right, scale = paras
-                    H, W = int(bottom - top), int(right - left)
-                    # for HR image, we apply gaussian blur to it to avoid over-sharp stylization results
-                    if scale <= 0.75:
-                        frame = cv2.sepFilter2D(frame, -1, kernel_1d, kernel_1d)
-                    if scale <= 0.375:
-                        frame = cv2.sepFilter2D(frame, -1, kernel_1d, kernel_1d)
-                    frame = cv2.resize(frame, (w, h))[top:bottom, left:right]
+        with torch.no_grad():
+            I = align_face(frame, landmarkpredictor)
+            if I is None:  
+                print("FACE WAS NOT DETECTED, SO SKIP THIS TRANSLATION")
+                continue
+                
+            I = transform(I).unsqueeze(dim=0).to(device)
+            s_w = pspencoder(I)
+            s_w = vtoonify.zplus2wplus(s_w)
+            if vtoonify.backbone == "dualstylegan":
+                if args.color_transfer:
+                    s_w = exstyle
+                else:
+                    s_w[:, :7] = exstyle[:, :7]
 
-            with torch.no_grad():
-                I = align_face(frame, landmarkpredictor)
-                I = transform(I).unsqueeze(dim=0).to(device)
-                s_w = pspencoder(I)
-                s_w = vtoonify.zplus2wplus(s_w)
-                if vtoonify.backbone == "dualstylegan":
-                    if args.color_transfer:
-                        s_w = exstyle
-                    else:
-                        s_w[:, :7] = exstyle[:, :7]
-
-                x = transform(frame).unsqueeze(dim=0).to(device)
-                # parsing network works best on 512x512 images, so we predict parsing maps on upsmapled frames
-                # followed by downsampling the parsing maps
-                x_p = F.interpolate(
-                    parsingpredictor(
-                        2
-                        * (
-                            F.interpolate(
-                                x, scale_factor=2, mode="bilinear", align_corners=False
-                            )
+            x = transform(frame).unsqueeze(dim=0).to(device)
+            # parsing network works best on 512x512 images, so we predict parsing maps on upsmapled frames
+            # followed by downsampling the parsing maps
+            x_p = F.interpolate(
+                parsingpredictor(
+                    2
+                    * (
+                        F.interpolate(
+                            x, scale_factor=2, mode="bilinear", align_corners=False
                         )
-                    )[0],
-                    scale_factor=0.5,
-                    recompute_scale_factor=False,
-                ).detach()
-                # we give parsing maps lower weight (1/16)
-                inputs = torch.cat((x, x_p / 16.0), dim=1)
-                # d_s has no effect when backbone is toonify
-                y_tilde = vtoonify(
-                    inputs, s_w.repeat(inputs.size(0), 1, 1), d_s=args.style_degree
-                )
-                y_tilde = torch.clamp(y_tilde, -1, 1)
+                    )
+                )[0],
+                scale_factor=0.5,
+                recompute_scale_factor=False,
+            ).detach()
+            # we give parsing maps lower weight (1/16)
+            inputs = torch.cat((x, x_p / 16.0), dim=1)
+            # d_s has no effect when backbone is toonify
+            y_tilde = vtoonify(
+                inputs, s_w.repeat(inputs.size(0), 1, 1), d_s=args.style_degree
+            )
+            y_tilde = torch.clamp(y_tilde, -1, 1)
 
-            cv2.imwrite(cropname, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-            save_image(y_tilde[0].cpu(), savename)
+        cv2.imwrite(cropname, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+        save_image(y_tilde[0].cpu(), savename)
 
-        print("Transfer style successfully!")
+    print("Transfer style successfully!")

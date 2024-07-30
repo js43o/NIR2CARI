@@ -61,7 +61,6 @@ def align_face(filepath, predictor):
     :param filepath: str
     :return: PIL Image
     """
-
     output_size = 256
     transform_size = 256
     enable_padding = True
@@ -74,8 +73,7 @@ def align_face(filepath, predictor):
 
     lm = get_landmark(filepath, predictor)
     if lm is None:
-        img = img.resize((output_size, output_size), PIL.Image.ANTIALIAS)
-        return img    
+        return None
     
     lm_chin = lm[0: 17]  # left-right
     lm_eyebrow_left = lm[17: 22]  # left-right
