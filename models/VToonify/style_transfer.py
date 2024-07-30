@@ -28,7 +28,7 @@ class TestOptions:
         self.parser.add_argument(
             "--content",
             type=str,
-            default="",
+            default=None,
             help="path of the content image/video",
         )
         self.parser.add_argument(
@@ -111,7 +111,7 @@ class TestOptions:
         self.parser.add_argument(
             "--batch_size",
             type=int,
-            default=4,
+            default=1,
             help="batch size of frames when processing video",
         )
         self.parser.add_argument(
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     )
     parsingpredictor.to(device).eval()
 
-    modelname = "./checkpoint/shape_predictor_68_face_landmarks.dat"
+    modelname = "models/VToonify/checkpoint/shape_predictor_68_face_landmarks.dat"
     if not os.path.exists(modelname):
         import wget, bz2
 
@@ -202,6 +202,9 @@ if __name__ == "__main__":
             + " with vtoonify_"
             + args.backbone[0]
         )
+        if not os.path.exists(args.output_path):
+            os.makedirs(args.output_path)
+        
         if args.video:
             cropname = os.path.join(args.output_path, basename + "_input.mp4")
             savename = os.path.join(
@@ -320,6 +323,7 @@ if __name__ == "__main__":
             )
 
             frame = cv2.imread(filename)
+            print(filename)
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
             # We detect the face in the image, and resize the image so that the eye distance is 64 pixels.

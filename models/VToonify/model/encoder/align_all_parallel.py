@@ -62,9 +62,20 @@ def align_face(filepath, predictor):
     :return: PIL Image
     """
 
+    output_size = 256
+    transform_size = 256
+    enable_padding = True
+    
+    # read image
+    if type(filepath) == str:
+        img = PIL.Image.open(filepath)
+    else:
+        img = PIL.Image.fromarray(filepath)
+
     lm = get_landmark(filepath, predictor)
     if lm is None:
-        return None    
+        img = img.resize((output_size, output_size), PIL.Image.ANTIALIAS)
+        return img    
     
     lm_chin = lm[0: 17]  # left-right
     lm_eyebrow_left = lm[17: 22]  # left-right
@@ -94,16 +105,6 @@ def align_face(filepath, predictor):
     c = eye_avg + eye_to_mouth * 0.1
     quad = np.stack([c - x - y, c - x + y, c + x + y, c + x - y])
     qsize = np.hypot(*x) * 2
-
-    # read image
-    if type(filepath) == str:
-        img = PIL.Image.open(filepath)
-    else:
-        img = PIL.Image.fromarray(filepath)
-
-    output_size = 256
-    transform_size = 256
-    enable_padding = True
 
     # Shrink.
     shrink = int(np.floor(qsize / output_size * 0.5))

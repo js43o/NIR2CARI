@@ -1,13 +1,9 @@
 import os
-from collections import OrderedDict
-from torch.autograd import Variable
 from options.test_options import TestOptions
 from data.data_loader import CreateDataLoader
 from models.models import create_model
 import util.util as util
 from util.visualizer import Visualizer
-from util import html
-import torch
 
 opt = TestOptions().parse(save=False)
 opt.nThreads = 1  # test code only supports nThreads = 1
@@ -19,30 +15,13 @@ data_loader = CreateDataLoader(opt)
 dataset = data_loader.load_data()
 visualizer = Visualizer(opt)
 # create website
-web_dir = os.path.join(
-    opt.results_dir, opt.name, "%s_%s" % (opt.phase, opt.which_epoch)
-)
-webpage = html.HTML(
-    web_dir,
-    "Experiment = %s, Phase = %s, Epoch = %s" % (opt.name, opt.phase, opt.which_epoch),
-)
 
-# test
-if not opt.engine and not opt.onnx:
-    model = create_model(opt)
-    if opt.data_type == 16:
-        model.half()
-    elif opt.data_type == 8:
-        model.type(torch.uint8)
-
-    if opt.verbose:
-        print(model)
-else:
-    from run_engine import run_trt_engine, run_onnx
+model = create_model(opt)
 
 for i, data in enumerate(dataset):
     if i >= opt.how_many:
         break
+    """
     if opt.data_type == 16:
         data["label"] = data["label"].half()
         data["inst"] = data["inst"].half()
@@ -67,15 +46,10 @@ for i, data in enumerate(dataset):
         )
     else:
         generated = model.inference(data["label"], data["inst"], data["image"])
+    """
+    generated = model.inference(data["label"], data["inst"], data["image"])
+    basename = os.path.basename(data["path"][0])
+    filename, extension = os.path.splitext(basename)
+    
+    util.save_image(util.tensor2im(generated.data[0]), os.path.join(opt.results_dir, filename + '_rgb' + extension))
 
-    visuals = OrderedDict(
-        [
-            ("input_label", util.tensor2label(data["label"][0], opt.label_nc)),
-            ("synthesized_image", util.tensor2im(generated.data[0])),
-        ]
-    )
-    img_path = data["path"]
-    print("process image... %s" % img_path)
-    visualizer.save_images(webpage, visuals, img_path)
-
-webpage.save()
