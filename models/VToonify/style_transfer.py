@@ -34,20 +34,6 @@ class TestOptions:
             help="path of the input images",
         )
         self.parser.add_argument(
-            "--style_id", type=int, default=26, help="the id of the style image"
-        )
-        self.parser.add_argument(
-            "--style_degree",
-            type=float,
-            default=0.5,
-            help="style degree for VToonify-D",
-        )
-        self.parser.add_argument(
-            "--color_transfer",
-            action="store_true",
-            help="transfer the color of the style",
-        )
-        self.parser.add_argument(
             "--ckpt",
             type=str,
             default="./checkpoint/vtoonify_t.pt",
@@ -72,21 +58,10 @@ class TestOptions:
             help="path of the style encoder",
         )
         self.parser.add_argument(
-            "--exstyle_path",
-            type=str,
-            default=None,
-            help="path of the extrinsic style code",
-        )
-        self.parser.add_argument(
             "--faceparsing_path",
             type=str,
             default="./checkpoint/faceparsing.pth",
             help="path of the face parsing model",
-        )
-        self.parser.add_argument(
-            "--video",
-            action="store_true",
-            help="if true, video stylization; if false, image stylization",
         )
         self.parser.add_argument(
             "--cpu", action="store_true", help="if true, only use cpu"
@@ -113,22 +88,16 @@ class TestOptions:
 
     def parse(self):
         self.opt = self.parser.parse_args()
-        if self.opt.exstyle_path is None:
-            self.opt.exstyle_path = os.path.join(
-                os.path.dirname(self.opt.ckpt), "exstyle_code.npy"
-            )
-        args = vars(self.opt)
-        print("Load options")
-        for name, value in sorted(args.items()):
-            print("%s: %s" % (str(name), str(value)))
+        # args = vars(self.opt)
+        # print("Load options")
+        # for name, value in sorted(args.items()):
+        #    print("%s: %s" % (str(name), str(value)))
         return self.opt
 
 
 if __name__ == "__main__":
-
     parser = TestOptions()
     args = parser.parse()
-    print("*" * 98)
 
     device = "cpu" if args.cpu else "cuda"
 
@@ -166,7 +135,7 @@ if __name__ == "__main__":
 
     pspencoder = load_psp_standalone(args.style_encoder_path, device)
 
-    print("Load models successfully!")
+    # print("Load models successfully!")
 
     filelist = os.listdir(args.input_path) if args.input_path else [args.content]
     for _filename in filelist:
@@ -176,11 +145,11 @@ if __name__ == "__main__":
         basename = os.path.basename(filename).split(".")[0]
         scale = 1
         kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
-        print(
-            "Processing "
-            + os.path.basename(filename)
-            + " with vtoonify"
-        )
+        # print(
+        #     "Processing "
+        #     + os.path.basename(filename)
+        #     + " with vtoonify"
+        # )
         
         if not os.path.exists(args.output_path):
             os.makedirs(args.output_path)
@@ -237,11 +206,11 @@ if __name__ == "__main__":
             inputs = torch.cat((x, x_p / 16.0), dim=1)
             # d_s has no effect when backbone is toonify
             y_tilde = vtoonify(
-                inputs, s_w.repeat(inputs.size(0), 1, 1), d_s=args.style_degree
+                inputs, s_w.repeat(inputs.size(0), 1, 1)
             )
             y_tilde = torch.clamp(y_tilde, -1, 1)
 
         cv2.imwrite(cropname, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
         save_image(y_tilde[0].cpu(), savename)
 
-    print("Transfer style successfully!")
+    # print("Transfer style successfully!")

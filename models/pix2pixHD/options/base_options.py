@@ -221,10 +221,10 @@ class BaseOptions:
 
         args = vars(self.opt)
 
-        print("------------ Options -------------")
-        for k, v in sorted(args.items()):
-            print("%s: %s" % (str(k), str(v)))
-        print("-------------- End ----------------")
+        # print("------------ Options -------------")
+        # for k, v in sorted(args.items()):
+        #     print("%s: %s" % (str(k), str(v)))
+        # print("-------------- End ----------------")
 
         # save to the disk
         expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)

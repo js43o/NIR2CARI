@@ -5,6 +5,9 @@ from torch.autograd import Variable
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
+import warnings
+
+warnings.filterwarnings('ignore', 'volatile')
 
 class Pix2PixHDModel(BaseModel):
     def name(self):
