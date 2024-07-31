@@ -2,3 +2,4 @@ datasets/
 checkpoints/
 output/
 temp*/
+*.pyc
