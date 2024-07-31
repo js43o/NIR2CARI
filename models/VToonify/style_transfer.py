@@ -1,102 +1,24 @@
 import os
 
 # os.environ['CUDA_VISIBLE_DEVICES'] = "0"
-import argparse
 import numpy as np
 import cv2
 import dlib
 import torch
 from torchvision import transforms
 import torch.nn.functional as F
-from model.vtoonify import VToonify
-from model.bisenet.model import BiSeNet
-from model.encoder.align_all_parallel import align_face
-from util import (
+from .model.vtoonify import VToonify
+from .model.bisenet.model import BiSeNet
+from .model.encoder.align_all_parallel import align_face
+from .util import (
     save_image,
     load_psp_standalone,
     get_video_crop_parameter,
 )
 
 
-class TestOptions:
-    def __init__(self):
-        self.parser = argparse.ArgumentParser(description="Style Transfer")
-        self.parser.add_argument(
-            "--content",
-            type=str,
-            default=None,
-            help="path of the content image/video",
-        )
-        self.parser.add_argument(
-            "--input_path",
-            type=str,
-            default=None,
-            help="path of the input images",
-        )
-        self.parser.add_argument(
-            "--ckpt",
-            type=str,
-            default="./checkpoint/vtoonify_t.pt",
-            help="path of the saved model",
-        )
-        self.parser.add_argument(
-            "--output_path",
-            type=str,
-            default="./output/",
-            help="path of the output images",
-        )
-        self.parser.add_argument(
-            "--scale_image",
-            action="store_true",
-            help="resize and crop the image to best fit the model",
-        )
-        self.parser.add_argument(
-            "--style_encoder_path",
-            type=str,
-            default="./checkpoint/encoder.pt",
-            help="path of the style encoder",
-        )
-        self.parser.add_argument(
-            "--faceparsing_path",
-            type=str,
-            default="./checkpoint/faceparsing.pth",
-            help="path of the face parsing model",
-        )
-        self.parser.add_argument(
-            "--cpu", action="store_true", help="if true, only use cpu"
-        )
-        self.parser.add_argument(
-            "--padding",
-            type=int,
-            nargs=4,
-            default=[200, 200, 200, 200],
-            help="left, right, top, bottom paddings to the face center",
-        )
-        self.parser.add_argument(
-            "--batch_size",
-            type=int,
-            default=1,
-            help="batch size of frames when processing video",
-        )
-        self.parser.add_argument(
-            "--parsing_map_path",
-            type=str,
-            default=None,
-            help="path of the refined parsing map of the target video",
-        )
-
-    def parse(self):
-        self.opt = self.parser.parse_args()
-        # args = vars(self.opt)
-        # print("Load options")
-        # for name, value in sorted(args.items()):
-        #    print("%s: %s" % (str(name), str(value)))
-        return self.opt
-
-
 def main(args):
     device = "cpu" if args.cpu else "cuda"
-
     transform = transforms.Compose(
         [
             transforms.ToTensor(),
@@ -141,14 +63,12 @@ def main(args):
         basename = os.path.basename(filename).split(".")[0]
         scale = 1
         kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
-        
+
         if not os.path.exists(args.output_path):
             os.makedirs(args.output_path)
-        
+
         cropname = os.path.join(args.output_path, basename + "_input.jpg")
-        savename = os.path.join(
-            args.output_path, basename + "_vtoonify" + ".jpg"
-        )
+        savename = os.path.join(args.output_path, basename + "_vtoonify" + ".jpg")
 
         frame = cv2.imread(filename)
         print(filename)
@@ -191,9 +111,7 @@ def main(args):
             ).detach()
             # we give parsing maps lower weight (1/16)
             inputs = torch.cat((x, x_p / 16.0), dim=1)
-            y_tilde = vtoonify(
-                inputs, s_w.repeat(inputs.size(0), 1, 1)
-            )
+            y_tilde = vtoonify(inputs, s_w.repeat(inputs.size(0), 1, 1))
             y_tilde = torch.clamp(y_tilde, -1, 1)
 
         cv2.imwrite(cropname, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))

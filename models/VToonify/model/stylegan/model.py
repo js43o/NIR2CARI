@@ -5,14 +5,15 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from model.stylegan.op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d, conv2d_gradfix
+from .op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d, conv2d_gradfix
+
 
 class PixelNorm(nn.Module):
     def __init__(self):
         super().__init__()
 
     def forward(self, input):
-        return input * torch.rsqrt(torch.mean(input ** 2, dim=1, keepdim=True) + 1e-8)
+        return input * torch.rsqrt(torch.mean(input**2, dim=1, keepdim=True) + 1e-8)
 
 
 def make_kernel(k):
@@ -31,7 +32,7 @@ class Upsample(nn.Module):
         super().__init__()
 
         self.factor = factor
-        kernel = make_kernel(kernel) * (factor ** 2)
+        kernel = make_kernel(kernel) * (factor**2)
         self.register_buffer("kernel", kernel)
 
         p = kernel.shape[0] - factor
@@ -75,7 +76,7 @@ class Blur(nn.Module):
         kernel = make_kernel(kernel)
 
         if upsample_factor > 1:
-            kernel = kernel * (upsample_factor ** 2)
+            kernel = kernel * (upsample_factor**2)
 
         self.register_buffer("kernel", kernel)
 
@@ -89,18 +90,25 @@ class Blur(nn.Module):
 
 class EqualConv2d(nn.Module):
     def __init__(
-        self, in_channel, out_channel, kernel_size, stride=1, padding=0, bias=True, dilation=1 ## modified
+        self,
+        in_channel,
+        out_channel,
+        kernel_size,
+        stride=1,
+        padding=0,
+        bias=True,
+        dilation=1,  ## modified
     ):
         super().__init__()
 
         self.weight = nn.Parameter(
             torch.randn(out_channel, in_channel, kernel_size, kernel_size)
         )
-        self.scale = 1 / math.sqrt(in_channel * kernel_size ** 2)
+        self.scale = 1 / math.sqrt(in_channel * kernel_size**2)
 
         self.stride = stride
         self.padding = padding
-        self.dilation = dilation ## modified
+        self.dilation = dilation  ## modified
 
         if bias:
             self.bias = nn.Parameter(torch.zeros(out_channel))
@@ -123,7 +131,7 @@ class EqualConv2d(nn.Module):
     def __repr__(self):
         return (
             f"{self.__class__.__name__}({self.weight.shape[1]}, {self.weight.shape[0]},"
-            f" {self.weight.shape[2]}, stride={self.stride}, padding={self.padding}, dilation={self.dilation})" ## modified
+            f" {self.weight.shape[2]}, stride={self.stride}, padding={self.padding}, dilation={self.dilation})"  ## modified
         )
 
 
@@ -202,7 +210,7 @@ class ModulatedConv2d(nn.Module):
 
             self.blur = Blur(blur_kernel, pad=(pad0, pad1))
 
-        fan_in = in_channel * kernel_size ** 2
+        fan_in = in_channel * kernel_size**2
         self.scale = 1 / math.sqrt(fan_in)
         self.padding = kernel_size // 2
 
@@ -446,11 +454,11 @@ class Generator(nn.Module):
 
         for layer_idx in range(self.num_layers):
             res = (layer_idx + 5) // 2
-            shape = [1, 1, 2 ** res, 2 ** res]
+            shape = [1, 1, 2**res, 2**res]
             self.noises.register_buffer(f"noise_{layer_idx}", torch.randn(*shape))
 
         for i in range(3, self.log_size + 1):
-            out_channel = self.channels[2 ** i]
+            out_channel = self.channels[2**i]
 
             self.convs.append(
                 StyledConv(
@@ -478,11 +486,11 @@ class Generator(nn.Module):
     def make_noise(self):
         device = self.input.input.device
 
-        noises = [torch.randn(1, 1, 2 ** 2, 2 ** 2, device=device)]
+        noises = [torch.randn(1, 1, 2**2, 2**2, device=device)]
 
         for i in range(3, self.log_size + 1):
             for _ in range(2):
-                noises.append(torch.randn(1, 1, 2 ** i, 2 ** i, device=device))
+                noises.append(torch.randn(1, 1, 2**i, 2**i, device=device))
 
         return noises
 
@@ -518,8 +526,8 @@ class Generator(nn.Module):
                 for s in styles:
                     style_ = []
                     for i in range(s.shape[1]):
-                        style_.append(self.style(s[:,i]).unsqueeze(1))
-                    styles_.append(torch.cat(style_,dim=1))
+                        style_.append(self.style(s[:, i]).unsqueeze(1))
+                    styles_.append(torch.cat(style_, dim=1))
                 styles = styles_
 
         if noise is None:
@@ -555,11 +563,15 @@ class Generator(nn.Module):
 
             if styles[0].ndim < 3:
                 latent = styles[0].unsqueeze(1).repeat(1, inject_index, 1)
-                latent2 = styles[1].unsqueeze(1).repeat(1, self.n_latent - inject_index, 1)
+                latent2 = (
+                    styles[1].unsqueeze(1).repeat(1, self.n_latent - inject_index, 1)
+                )
 
                 latent = torch.cat([latent, latent2], 1)
             else:
-                latent = torch.cat([styles[0][:,0:inject_index], styles[1][:,inject_index:]], 1)
+                latent = torch.cat(
+                    [styles[0][:, 0:inject_index], styles[1][:, inject_index:]], 1
+                )
 
         out = self.input(latent)
         out = self.conv1(out, latent[:, 0], noise=noise[0])
@@ -597,7 +609,7 @@ class ConvLayer(nn.Sequential):
         blur_kernel=[1, 3, 3, 1],
         bias=True,
         activate=True,
-        dilation=1, ## modified
+        dilation=1,  ## modified
     ):
         layers = []
 
@@ -614,7 +626,7 @@ class ConvLayer(nn.Sequential):
 
         else:
             stride = 1
-            self.padding = kernel_size // 2 + dilation-1 ## modified
+            self.padding = kernel_size // 2 + dilation - 1  ## modified
 
         layers.append(
             EqualConv2d(
@@ -624,7 +636,7 @@ class ConvLayer(nn.Sequential):
                 padding=self.padding,
                 stride=stride,
                 bias=bias and not activate,
-                dilation=dilation, ## modified
+                dilation=dilation,  ## modified
             )
         )
 
