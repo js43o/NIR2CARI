@@ -13,20 +13,12 @@ requirements:
     # download face landmark model from:
     # http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
 """
-from argparse import ArgumentParser
-import time
 import numpy as np
 import PIL
 import PIL.Image
-import os
 import scipy
 import scipy.ndimage
 import dlib
-import multiprocessing as mp
-import math
-
-#from configs.paths_config import model_paths
-SHAPE_PREDICTOR_PATH = 'shape_predictor_68_face_landmarks.dat'#model_paths["shape_predictor"]
 
 
 def get_landmark(filepath, predictor):
@@ -42,7 +34,9 @@ def get_landmark(filepath, predictor):
     
     if len(dets) == 0:
         # print('Error: no face detected! If you are sure there are faces in your input, you may rerun the code or change the image several times until the face is detected. Sometimes the detector is unstable.')
-        return None
+        # return None
+        w, h, _ = img.shape
+        dets.append(dlib.rectangle(left=0, top=0, right=w, bottom=h))
     
     shape = None
     for k, d in enumerate(dets):
@@ -147,68 +141,3 @@ def align_face(filepath, predictor):
 
     # Save aligned image.
     return img
-
-
-def chunks(lst, n):
-    """Yield successive n-sized chunks from lst."""
-    for i in range(0, len(lst), n):
-        yield lst[i:i + n]
-
-
-def extract_on_paths(file_paths):
-    predictor = dlib.shape_predictor(SHAPE_PREDICTOR_PATH)
-    pid = mp.current_process().name
-    print('\t{} is starting to extract on #{} images'.format(pid, len(file_paths)))
-    tot_count = len(file_paths)
-    count = 0
-    for file_path, res_path in file_paths:
-        count += 1
-        if count % 100 == 0:
-            print('{} done with {}/{}'.format(pid, count, tot_count))
-        try:
-            res = align_face(file_path, predictor)
-            res = res.convert('RGB')
-            os.makedirs(os.path.dirname(res_path), exist_ok=True)
-            res.save(res_path)
-        except Exception:
-            continue
-    print('\tDone!')
-
-
-def parse_args():
-    parser = ArgumentParser(add_help=False)
-    parser.add_argument('--num_threads', type=int, default=1)
-    parser.add_argument('--root_path', type=str, default='')
-    args = parser.parse_args()
-    return args
-
-
-def run(args):
-    root_path = args.root_path
-    out_crops_path = root_path + '_crops'
-    if not os.path.exists(out_crops_path):
-        os.makedirs(out_crops_path, exist_ok=True)
-
-    file_paths = []
-    for root, dirs, files in os.walk(root_path):
-        for file in files:
-            file_path = os.path.join(root, file)
-            fname = os.path.join(out_crops_path, os.path.relpath(file_path, root_path))
-            res_path = '{}.jpg'.format(os.path.splitext(fname)[0])
-            if os.path.splitext(file_path)[1] == '.txt' or os.path.exists(res_path):
-                continue
-            file_paths.append((file_path, res_path))
-
-    file_chunks = list(chunks(file_paths, int(math.ceil(len(file_paths) / args.num_threads))))
-    print(len(file_chunks))
-    pool = mp.Pool(args.num_threads)
-    print('Running on {} paths\nHere we goooo'.format(len(file_paths)))
-    tic = time.time()
-    pool.map(extract_on_paths, file_chunks)
-    toc = time.time()
-    print('Mischief managed in {}s'.format(toc - tic))
-
-
-if __name__ == '__main__':
-    args = parse_args()
-    run(args)
