@@ -47,7 +47,6 @@ class TestOptions:
         )
         self.parser.add_argument(
             "--scale_image",
-            default=True,
             action="store_true",
             help="resize and crop the image to best fit the model",
         )
@@ -145,11 +144,6 @@ if __name__ == "__main__":
         basename = os.path.basename(filename).split(".")[0]
         scale = 1
         kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
-        # print(
-        #     "Processing "
-        #     + os.path.basename(filename)
-        #     + " with vtoonify"
-        # )
         
         if not os.path.exists(args.output_path):
             os.makedirs(args.output_path)
@@ -180,7 +174,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             I = align_face(frame, landmarkpredictor)
             if I is None:  
-                print("FACE WAS NOT DETECTED, SO SKIP THIS TRANSLATION")
+                print("Face landmarks was NOT detected, so skip translation of this image")
                 continue
                 
             I = transform(I).unsqueeze(dim=0).to(device)
