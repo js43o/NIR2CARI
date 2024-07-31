@@ -94,10 +94,7 @@ class TestOptions:
         return self.opt
 
 
-if __name__ == "__main__":
-    parser = TestOptions()
-    args = parser.parse()
-
+def main(args):
     device = "cpu" if args.cpu else "cuda"
 
     transform = transforms.Compose(
@@ -173,16 +170,12 @@ if __name__ == "__main__":
 
         with torch.no_grad():
             I = align_face(frame, landmarkpredictor)
-            if I is None:  
-                print("Face landmarks was NOT detected, so skip translation of this image")
-                continue
-                
             I = transform(I).unsqueeze(dim=0).to(device)
             s_w = pspencoder(I)
             s_w = vtoonify.zplus2wplus(s_w)
 
             x = transform(frame).unsqueeze(dim=0).to(device)
-            # parsing network works best on 512x512 images, so we predict parsing maps on upsmapled frames
+            # parsing network works best on 512x512 images, so we predict parsing maps on upsampled frames
             # followed by downsampling the parsing maps
             x_p = F.interpolate(
                 parsingpredictor(
@@ -198,7 +191,6 @@ if __name__ == "__main__":
             ).detach()
             # we give parsing maps lower weight (1/16)
             inputs = torch.cat((x, x_p / 16.0), dim=1)
-            # d_s has no effect when backbone is toonify
             y_tilde = vtoonify(
                 inputs, s_w.repeat(inputs.size(0), 1, 1)
             )

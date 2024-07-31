@@ -24,8 +24,7 @@ def get_norm_layer(norm_type='instance'):
         raise NotImplementedError('normalization layer [%s] is not found' % norm_type)
     return norm_layer
 
-def define_G(input_nc, output_nc, ngf, netG, n_downsample_global=3, n_blocks_global=9, n_local_enhancers=1, 
-             n_blocks_local=3, norm='instance', gpu_ids=[]):    
+def define_G(input_nc, output_nc, ngf, netG, n_downsample_global=3, n_blocks_global=9, n_local_enhancers=1, n_blocks_local=3, norm='instance', gpu_ids=[]):    
     norm_layer = get_norm_layer(norm_type=norm)     
     if netG == 'global':    
         netG = GlobalGenerator(input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, norm_layer)       
