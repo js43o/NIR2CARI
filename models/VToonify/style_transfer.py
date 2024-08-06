@@ -28,7 +28,8 @@ def main(args):
 
     vtoonify = VToonify()
     vtoonify.load_state_dict(
-        torch.load(args.ckpt, map_location=lambda storage, loc: storage)["g_ema"]
+        torch.load(args.ckpt, map_location=lambda storage, loc: storage)["g_ema"],
+        strict=False,  # 추가된 레이어에 대한 가중치는 고려하지 않기
     )
     vtoonify.to(device)
 
@@ -89,14 +90,15 @@ def main(args):
                 frame = cv2.resize(frame, (w, h))[top:bottom, left:right]
 
         with torch.no_grad():
-            I = align_face(frame, landmarkpredictor)
-            I = transform(I).unsqueeze(dim=0).to(device)
-            s_w = pspencoder(I)
-            s_w = vtoonify.zplus2wplus(s_w)
+            I = align_face(
+                frame, landmarkpredictor, basename
+            )  # 입력 이미지를 얼굴 랜드마크에 맞춰 정렬
+            I = transform(I).unsqueeze(dim=0).to(device)  # 텐서로 변환한 뒤 Normalize
+            s_w = pspencoder(I)  # pix2pix encoder를 통해 먼저 스타일 벡터로 인코딩
+            s_w = vtoonify.zplus2wplus(s_w)  # z+를 w+로 변환
 
             x = transform(frame).unsqueeze(dim=0).to(device)
-            # parsing network works best on 512x512 images, so we predict parsing maps on upsampled frames
-            # followed by downsampling the parsing maps
+            # 입력 이미지를 다운샘플링한 후 파싱 맵을 생성함
             x_p = F.interpolate(
                 parsingpredictor(
                     2
@@ -109,10 +111,10 @@ def main(args):
                 scale_factor=0.5,
                 recompute_scale_factor=False,
             ).detach()
-            # we give parsing maps lower weight (1/16)
+            # 파싱 맵의 크기를 16배 줄여서 원본 이미지에 concate한 후 vtoonify 순전파 수행
             inputs = torch.cat((x, x_p / 16.0), dim=1)
             y_tilde = vtoonify(inputs, s_w.repeat(inputs.size(0), 1, 1))
-            y_tilde = torch.clamp(y_tilde, -1, 1)
+            y_tilde = torch.clamp(y_tilde, -1, 1)  # -1~1 사이의 범위가 되게끔 잘라냄
 
         cv2.imwrite(cropname, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
         save_image(y_tilde[0].cpu(), savename)

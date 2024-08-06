@@ -1,13 +1,23 @@
 import math
 import random
+import functools
+import operator
 
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.autograd import Function
 
-from .op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d, conv2d_gradfix
+from .op import (
+    FusedLeakyReLU,
+    fused_leaky_relu,
+    upfirdn2d,
+    conv2d_gradfix,
+)
 
 
+# 픽셀 Normalization, 너무 큰 값들을 대략 -1~1 근방으로 줄여줌
+# torch.rsqrt(): 제곱근의 역수
 class PixelNorm(nn.Module):
     def __init__(self):
         super().__init__()
@@ -16,6 +26,8 @@ class PixelNorm(nn.Module):
         return input * torch.rsqrt(torch.mean(input**2, dim=1, keepdim=True) + 1e-8)
 
 
+# 배열을 받아서 만약 1차원이면 2차원으로 만든 후 전체 합으로 나눠줌
+# 단순히 2차원 이상의 텐서(단, 값은 -1~1 사이)를 만드는 역할
 def make_kernel(k):
     k = torch.tensor(k, dtype=torch.float32)
 
@@ -27,13 +39,15 @@ def make_kernel(k):
     return k
 
 
+# 업샘플링
+# factor만큼 입력 텐서를 스케일링한 후, 커널에 지정한 값에 따라 입력 텐서의 값을 조절(분배)함
 class Upsample(nn.Module):
     def __init__(self, kernel, factor=2):
         super().__init__()
 
         self.factor = factor
-        kernel = make_kernel(kernel) * (factor**2)
-        self.register_buffer("kernel", kernel)
+        kernel = make_kernel(kernel) * (factor**2)  # 커널 생성 후 적당히 값을 높여줌
+        self.register_buffer("kernel", kernel)  # 이걸 내부 버퍼에 저장함
 
         p = kernel.shape[0] - factor
 
@@ -43,11 +57,14 @@ class Upsample(nn.Module):
         self.pad = (pad0, pad1)
 
     def forward(self, input):
+        # upsampling + padding + FIR filter
         out = upfirdn2d(input, self.kernel, up=self.factor, down=1, pad=self.pad)
 
         return out
 
 
+# 다운샘플링 (미사용)
+# 업샘플링의 반대 연산일 것으로 추정
 class Downsample(nn.Module):
     def __init__(self, kernel, factor=2):
         super().__init__()
@@ -69,6 +86,7 @@ class Downsample(nn.Module):
         return out
 
 
+# 블러
 class Blur(nn.Module):
     def __init__(self, kernel, pad, upsample_factor=1):
         super().__init__()
@@ -135,6 +153,8 @@ class EqualConv2d(nn.Module):
         )
 
 
+# 일반 nn.Linear와 다른 점은 뭘까?
+# 일단은 lr_mul이 모듈의 weight와 bias에 곱해진다는 것 정도...
 class EqualLinear(nn.Module):
     def __init__(
         self, in_dim, out_dim, bias=True, bias_init=0, lr_mul=1, activation=None
@@ -172,6 +192,9 @@ class EqualLinear(nn.Module):
         )
 
 
+# StyleGAN2에서 새롭게 정의된 연산
+# Mod affine transform & weight, Demodulation, Conv 3*3 & input, add bias and noise
+# 논문 그림에서 회색 박스 내부에 해당
 class ModulatedConv2d(nn.Module):
     def __init__(
         self,
@@ -194,6 +217,7 @@ class ModulatedConv2d(nn.Module):
         self.upsample = upsample
         self.downsample = downsample
 
+        # 업샘플링 또는 다운샘플링 & 블러
         if upsample:
             factor = 2
             p = (len(blur_kernel) - factor) - (kernel_size - 1)
@@ -210,18 +234,21 @@ class ModulatedConv2d(nn.Module):
 
             self.blur = Blur(blur_kernel, pad=(pad0, pad1))
 
+        # 스케일 인자와 패딩 크기 결정
         fan_in = in_channel * kernel_size**2
         self.scale = 1 / math.sqrt(fan_in)
         self.padding = kernel_size // 2
 
+        # 레이어 가중치 선언
         self.weight = nn.Parameter(
             torch.randn(1, out_channel, in_channel, kernel_size, kernel_size)
         )
 
+        # modulation & demodulation
         self.modulation = EqualLinear(style_dim, in_channel, bias_init=1)
 
         self.demodulate = demodulate
-        self.fused = fused
+        self.fused = fused  # 여러 개의 연산을 합친 버전(fused)을 사용할 것인지의 여부?
 
     def __repr__(self):
         return (
@@ -234,14 +261,17 @@ class ModulatedConv2d(nn.Module):
 
         if not self.fused:
             weight = self.scale * self.weight.squeeze(0)
+            # 스타일 A를 먼저 modulation
             style = self.modulation(style)
 
             if self.demodulate:
                 w = weight.unsqueeze(0) * style.view(batch, 1, in_channel, 1, 1)
+                # 그리고 demodulation을 위한 가중치의 L2 norm 계산
                 dcoefs = (w.square().sum((2, 3, 4)) + 1e-8).rsqrt()
 
             input = input * style.reshape(batch, in_channel, 1, 1)
 
+            # 업샘플링이 포함된 블록이면 입력에 대해 업샘플링 후 컨볼루션 연산 수행
             if self.upsample:
                 weight = weight.transpose(0, 1)
                 out = conv2d_gradfix.conv_transpose2d(
@@ -257,6 +287,7 @@ class ModulatedConv2d(nn.Module):
                 out = conv2d_gradfix.conv2d(input, weight, padding=self.padding)
 
             if self.demodulate:
+                # demodulation 적용
                 out = out * dcoefs.view(batch, -1, 1, 1)
 
             return out
@@ -311,6 +342,7 @@ class ModulatedConv2d(nn.Module):
         return out
 
 
+# 입력 텐서랑 동일한 형상의 노이즈를 생성한 후, weight(스칼라)만큼 더해줌
 class NoiseInjection(nn.Module):
     def __init__(self):
         super().__init__()
@@ -325,6 +357,8 @@ class NoiseInjection(nn.Module):
         return image + self.weight * noise
 
 
+# 맨 처음 생성자의 입력으로 들어가는 상수
+# 이미지의 총 픽셀 수만큼 파라미터로서 존재함 (+ 배치 크기까지 고려)
 class ConstantInput(nn.Module):
     def __init__(self, channel, size=4):
         super().__init__()
@@ -338,6 +372,8 @@ class ConstantInput(nn.Module):
         return out
 
 
+# 입력에 대해 스타일 블록(Mod + Demod + Conv)을 적용한 직후, 노이즈 주입 + LeakyReLU 적용하는 부분
+# 논문 그림에서 회색 박스 바깥 부분(out + b_i + B)을 포함
 class StyledConv(nn.Module):
     def __init__(
         self,
@@ -375,6 +411,7 @@ class StyledConv(nn.Module):
         return out
 
 
+# 3채널 출력 ModulatedConv 블록 + bias + 선택적 업샘플링
 class ToRGB(nn.Module):
     def __init__(self, in_channel, style_dim, upsample=True, blur_kernel=[1, 3, 3, 1]):
         super().__init__()
@@ -413,6 +450,7 @@ class Generator(nn.Module):
 
         self.style_dim = style_dim
 
+        # 가장 첫 레이어는 입력 이미지를 픽셀별로 Normalization 하는 역할
         layers = [PixelNorm()]
 
         for i in range(n_mlp):
@@ -422,6 +460,7 @@ class Generator(nn.Module):
                 )
             )
 
+        # 잠재 벡터 z를 w로 매핑하는 FC 레이어들
         self.style = nn.Sequential(*layers)
 
         self.channels = {
@@ -429,37 +468,42 @@ class Generator(nn.Module):
             8: 512,
             16: 512,
             32: 512,
-            64: 256 * channel_multiplier,
+            64: 256 * channel_multiplier,  # 512
             128: 128 * channel_multiplier,
             256: 64 * channel_multiplier,
             512: 32 * channel_multiplier,
             1024: 16 * channel_multiplier,
         }
 
+        # 합성 네트워크의 첫 입력은 4*4*512 크기의 학습 가능한 상수
         self.input = ConstantInput(self.channels[4])
+        # 회색 박스 연산 추가
         self.conv1 = StyledConv(
             self.channels[4], self.channels[4], 3, style_dim, blur_kernel=blur_kernel
         )
         self.to_rgb1 = ToRGB(self.channels[4], style_dim, upsample=False)
 
+        # (output) size = 1024라면 log_size = 10, num_layers = 17
         self.log_size = int(math.log(size, 2))
         self.num_layers = (self.log_size - 2) * 2 + 1
 
         self.convs = nn.ModuleList()
-        self.upsamples = nn.ModuleList()
+        # self.upsamples = nn.ModuleList()
         self.to_rgbs = nn.ModuleList()
         self.noises = nn.Module()
 
-        in_channel = self.channels[4]
+        in_channel = self.channels[4]  # 512
 
-        for layer_idx in range(self.num_layers):
-            res = (layer_idx + 5) // 2
-            shape = [1, 1, 2**res, 2**res]
+        for layer_idx in range(self.num_layers):  # (0, 16)
+            res = (layer_idx + 5) // 2  # 2~10
+            shape = [1, 1, 2**res, 2**res]  # 4~1024
             self.noises.register_buffer(f"noise_{layer_idx}", torch.randn(*shape))
 
-        for i in range(3, self.log_size + 1):
-            out_channel = self.channels[2**i]
+        for i in range(3, self.log_size + 1):  # (3, 11)
+            out_channel = self.channels[2**i]  # [8~1024] = 512~32
 
+            # 단위 블록을 순차적으로 해상도를 줄여나가면서 연결함
+            # StyledConv(업샘플링) + StyledConv + ToRGB
             self.convs.append(
                 StyledConv(
                     in_channel,
@@ -483,11 +527,21 @@ class Generator(nn.Module):
 
         self.n_latent = self.log_size * 2 - 2
 
+        ##### 추가 레이어 추가
+        self.last_conv = nn.Sequential(
+            ConvLayer(32, 32, 3), ConvLayer(32, 32, 3), ConvLayer(32, 32, 3)
+        )
+        self.last_rgb = ConvLayer(32, 3, 3)
+
+    ### 미사용 (DualStyleGAN에서 사용됨)
+    """
     def make_noise(self):
         device = self.input.input.device
 
+        # 시작은 4*4 노이즈 하나
         noises = [torch.randn(1, 1, 2**2, 2**2, device=device)]
 
+        # 8*8, 16*16, ..., 1024*1024 크기의 노이즈를 각각 두 장씩 추가
         for i in range(3, self.log_size + 1):
             for _ in range(2):
                 noises.append(torch.randn(1, 1, 2**i, 2**i, device=device))
@@ -502,9 +556,11 @@ class Generator(nn.Module):
 
         return latent
 
+    # 입력 벡터로부터 FC 레이어 통과시키고 나온 w 반환
     def get_latent(self, input):
         return self.style(input)
 
+    # 실제 VToonify 동작 시에는 사용되지 않는 것 같음
     def forward(
         self,
         styles,
@@ -520,7 +576,7 @@ class Generator(nn.Module):
     ):
         if not input_is_latent:
             if not z_plus_latent:
-                styles = [self.style(s) for s in styles]
+                styles = [self.style(s) for s in styles]  # FC 레이어에 각 스타일 통과
             else:
                 styles_ = []
                 for s in styles:
@@ -573,8 +629,8 @@ class Generator(nn.Module):
                     [styles[0][:, 0:inject_index], styles[1][:, inject_index:]], 1
                 )
 
-        out = self.input(latent)
-        out = self.conv1(out, latent[:, 0], noise=noise[0])
+        out = self.input(latent)  # FC 레이어 통과
+        out = self.conv1(out, latent[:, 0], noise=noise[0])  # 0번째 노이즈 사용
 
         skip = self.to_rgb1(out, latent[:, 1])
 
@@ -597,6 +653,7 @@ class Generator(nn.Module):
 
         else:
             return image, None
+    """
 
 
 class ConvLayer(nn.Sequential):
@@ -668,6 +725,7 @@ class ResBlock(nn.Module):
 
 
 class Discriminator(nn.Module):
+    # size는 출력 이미지의 크기 값, 기본 1024
     def __init__(self, size, channel_multiplier=2, blur_kernel=[1, 3, 3, 1]):
         super().__init__()
 
@@ -683,10 +741,13 @@ class Discriminator(nn.Module):
             1024: 16 * channel_multiplier,
         }
 
+        # 기본값 기준 32
         convs = [ConvLayer(3, channels[size], 1)]
 
+        # 기본값 기준 10
         log_size = int(math.log(size, 2))
 
+        # 기본값 기준 32
         in_channel = channels[size]
 
         for i in range(log_size, 2, -1):
