@@ -483,7 +483,8 @@ class Generator(nn.Module):
         )
         self.to_rgb1 = ToRGB(self.channels[4], style_dim, upsample=False)
 
-        # (output) size = 1024라면 log_size = 10, num_layers = 17
+        # size = 1024이라면 log_size = 10, num_layers = 17
+        # size = 256이라면 log_size = 8, num_layers = 13
         self.log_size = int(math.log(size, 2))
         self.num_layers = (self.log_size - 2) * 2 + 1
 
@@ -494,10 +495,12 @@ class Generator(nn.Module):
 
         in_channel = self.channels[4]  # 512
 
-        for layer_idx in range(self.num_layers):  # (0, 16)
-            res = (layer_idx + 5) // 2  # 2~10
-            shape = [1, 1, 2**res, 2**res]  # 4~1024
-            self.noises.register_buffer(f"noise_{layer_idx}", torch.randn(*shape))
+        for layer_idx in range(self.num_layers):  # 0~16 or 0~12
+            res = (layer_idx + 5) // 2  # 2~10 or 2~8
+            shape = [1, 1, 2**res, 2**res]  # 4~1024 or 4~256
+            self.noises.register_buffer(
+                f"noise_{layer_idx}", torch.randn(*shape)
+            )  # noise_0 = (1, 1, 4, 4), noise_12 = (1, 1, 256, 256), noise_15 = (1, 1, 1024, 1024)
 
         for i in range(3, self.log_size + 1):  # (3, 11)
             out_channel = self.channels[2**i]  # [8~1024] = 512~32
@@ -526,12 +529,6 @@ class Generator(nn.Module):
             in_channel = out_channel
 
         self.n_latent = self.log_size * 2 - 2
-
-        ##### 추가 레이어 추가
-        self.last_conv = nn.Sequential(
-            ConvLayer(32, 32, 3), ConvLayer(32, 32, 3), ConvLayer(32, 32, 3)
-        )
-        self.last_rgb = ConvLayer(32, 3, 3)
 
     ### 미사용 (DualStyleGAN에서 사용됨)
     """

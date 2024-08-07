@@ -141,16 +141,9 @@ class VToonify(nn.Module):
                 fusion_index = (_index - 1) // 2  # 0, 1, 2, 3
                 f_E = encoder_features[fusion_index]
 
-                ### f_E의 각 값을 늘린다면? => 원본 인물의 identity 강해짐
-                ### out의 각 값을 늘린다면?
-
                 # 현재 레이어의 특징과 상응하는 인코더의 특징을 concatenation한 뒤 융합
                 out = self.fusion_out[fusion_index](torch.cat([out, f_E], dim=1))
                 skip = self.fusion_skip[fusion_index](torch.cat([skip, f_E], dim=1))
-
-                if _index == 7:
-                    out *= 10
-                    skip *= 10
 
                 print("GAN with fusion out, skip = %s, %s" % (out.shape, skip.shape))
 
@@ -169,12 +162,6 @@ class VToonify(nn.Module):
             _index += 2
 
         image = skip
-
-        ### 새로 추가한 레이어 통과
-        # out = self.stylegan().last_conv(out)
-        # skip = self.stylegan().last_rgb(out)
-        # print("NEW OUT & RGB =", out.shape, skip.shape)
-        # return skip
 
         return image
 
