@@ -2,6 +2,6 @@ datasets/
 checkpoints/
 output/
 landmarked/
-temp*/
+temp*
 *.pyc
-temp
+*.pt
