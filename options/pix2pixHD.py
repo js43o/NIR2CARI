@@ -49,7 +49,7 @@ class Options:
 
         # Test options
         self.ntest = float("inf")
-        self.results_dir = "temp_output"
+        self.results_dir = "output/pix2pixHD"
         self.aspect_ratio = 1.0
         self.phase = "test"
         self.which_epoch = "latest"

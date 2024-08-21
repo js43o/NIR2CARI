@@ -3,6 +3,7 @@ import numpy as np
 import math
 from torch import nn
 from .stylegan.model import Generator
+import cv2
 
 
 class VToonifyResBlock(nn.Module):
@@ -88,55 +89,39 @@ class VToonify(nn.Module):
 
             self.fusion_skip.append(nn.Conv2d(num_channels + 3, 3, 3, 1, 1, bias=True))
 
-    def forward(self, x, style, d_s=None, return_mask=False, return_feat=False):
-        print("x.shape & style.shape =", x.shape, style.shape)
+    def forward(self, x, style):
         # map style to W+ space
         if style is not None and style.ndim < 3:
             adastyles = style.unsqueeze(1).repeat(1, self.generator.n_latent, 1)
         elif style is not None:
-            nB, nL, nD = style.shape
             adastyles = style
-
-        print("adastyles.shape =", adastyles.shape)
 
         feat = x
         encoder_features = []  # 중간 특징 저장용 배열 (이후 G의 각 레이어에 융합)
 
-        print("##### starts of E #####")
-
         # 인코더의 CONV 파트를 통과시키면서 다운샘플링
         for i, block in enumerate(self.encoder[:-2]):
             feat = block(feat)
-            print("after ENCODER-CONV %d = %s" % (i, feat.shape))
             encoder_features.append(feat)
         encoder_features = encoder_features[::-1]  # 거꾸로
 
         # 인코더의 ResBlocks 파트 통과
         for ii, block in enumerate(self.encoder[-2]):
-            print("after ENCODER-RESBLOCK %d = %s" % (ii, feat.shape))
             feat = block(feat)
 
         # 인코더의 마지막 레이어 (단일 Conv) 통과
         out = feat
         skip = self.encoder[-1](feat)
-        print("skip.shape =", skip.shape)
-        if return_feat:
-            return out, skip
-
-        print("##### starts of G #####")
-        print("total G's CONV =", len(self.stylegan().convs))
-        print("total G's to_rgbs =", len(self.stylegan().to_rgbs))
 
         # G 시작, 32x32부터 다시 업스케일링
         _index = 1
         m_Es = []
         for conv1, conv2, to_rgb in zip(
-            self.stylegan().convs[6::2],  # conv1 = 짝수 파트
+            self.stylegan().convs[6::2],  # conv1 = 짝수 파트 (512, 512, 3부터 시작)
             self.stylegan().convs[7::2],  # conv2 = 홀수 파트
             self.stylegan().to_rgbs[3:],
         ):
-            print("## GAN of ", _index, "res")
-            # pass the mid-layer features of E to the corresponding resolution layers of G
+            # 인코더의 각 중간 레이어들의 특징을 동일 해상도를 갖는 생성자의 레이어에 전달
             if 2 ** (5 + ((_index - 1) // 2)) <= self.in_size:  # 32, 64, 128, 256
                 fusion_index = (_index - 1) // 2  # 0, 1, 2, 3
                 f_E = encoder_features[fusion_index]
@@ -145,20 +130,18 @@ class VToonify(nn.Module):
                 out = self.fusion_out[fusion_index](torch.cat([out, f_E], dim=1))
                 skip = self.fusion_skip[fusion_index](torch.cat([skip, f_E], dim=1))
 
-                print("GAN with fusion out, skip = %s, %s" % (out.shape, skip.shape))
-
             # remove the noise input
             batch, _, height, width = out.shape
             noise = (
                 x.new_empty(batch, 1, height * 2, width * 2).normal_().detach() * 0.0
             )
 
-            out = conv1(out, adastyles[:, _index + 6], noise=noise)
-            print("GAN last conv1 out =", out.shape)
-            out = conv2(out, adastyles[:, _index + 7], noise=noise)
-            print("GAN last conv2 out =", out.shape)
-            skip = to_rgb(out, adastyles[:, _index + 8], skip)
-            print("GAN last to_rgb skip =", skip.shape)
+            code = adastyles
+
+            out = conv1(out, code[:, _index + 6], noise=noise)
+            out = conv2(out, code[:, _index + 7], noise=noise)
+            skip = to_rgb(out, code[:, _index + 8], skip)
+
             _index += 2
 
         image = skip

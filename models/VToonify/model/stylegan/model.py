@@ -531,7 +531,6 @@ class Generator(nn.Module):
         self.n_latent = self.log_size * 2 - 2
 
     ### 미사용 (DualStyleGAN에서 사용됨)
-    """
     def make_noise(self):
         device = self.input.input.device
 
@@ -557,7 +556,7 @@ class Generator(nn.Module):
     def get_latent(self, input):
         return self.style(input)
 
-    # 실제 VToonify 동작 시에는 사용되지 않는 것 같음
+    # 실제 VToonify 동작 시에는 사용되지 않음
     def forward(
         self,
         styles,
@@ -650,7 +649,6 @@ class Generator(nn.Module):
 
         else:
             return image, None
-    """
 
 
 class ConvLayer(nn.Sequential):
