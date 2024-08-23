@@ -33,6 +33,7 @@ def get_landmark(filepath, predictor):
         img = dlib.load_rgb_image(filepath)
     else:
         img = filepath
+
     dets = detector(img, 1)
 
     if len(dets) == 0:
@@ -52,7 +53,7 @@ def get_landmark(filepath, predictor):
     return lm
 
 
-def align_face(filepath, predictor, name):
+def align_face(filepath, predictor):
     """
     :param filepath: str
     :return: PIL Image
@@ -72,7 +73,6 @@ def align_face(filepath, predictor, name):
     img2 = np.array(img)
     for x, y in lm:
         img2 = cv2.circle(img2, (x, y), 2, color=(0, 0, 255), thickness=-1)
-    cv2.imwrite("landmarked/" + name + ".png", img2)
 
     lm_chin = lm[0:17]  # left-right
     lm_eyebrow_left = lm[17:22]  # left-right

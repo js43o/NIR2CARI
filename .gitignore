@@ -1,7 +1,7 @@
-datasets/
-checkpoints/
-output/
-landmarked/
+datasets*
+checkpoints*
+output*
+landmarked*
 temp*
 *.pyc
 *.pt

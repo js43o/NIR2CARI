@@ -15,7 +15,6 @@ from .util import (
     load_psp_standalone,
     get_video_crop_parameter,
 )
-import PIL
 
 
 def main(args):
@@ -73,7 +72,6 @@ def main(args):
         savename = os.path.join(args.output_path, basename + "_vtoonify" + ".jpg")
 
         frame = cv2.imread(filename)
-        print(filename)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
         # We detect the face in the image, and resize the image so that the eye distance is 64 pixels.

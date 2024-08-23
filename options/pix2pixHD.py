@@ -19,7 +19,7 @@ class Options:
         self.input_nc = 3
         self.output_nc = 3
 
-        self.dataroot = "./../../datasets/nir_to_rgb"
+        self.dataroot = "datasets"  # "./../../datasets/nir_to_rgb"
         self.resize_or_crop = "scale_width"
         self.serial_batches = True  # FIXED
         self.no_flip = True  # FIXED
