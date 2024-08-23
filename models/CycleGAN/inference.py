@@ -29,23 +29,7 @@ def sample_images(image, generator):
     generated = cv2.cvtColor(generated, cv2.COLOR_BGR2GRAY)
 
     R, G, B = yiq_to_rgb(generated, I, Q)
-    synthesized = np.array([B, G, R])
+    synthesized = np.array([B, G, R]).transpose(1, 2, 0).clip(0, 255).astype(np.uint8)
     # cv2.imwrite("%s/%s.png" % (output_path, filename), synthesized)
 
     return synthesized
-
-
-""" 
-
-def main():
-    os.makedirs("%s", exist_ok=True)
-    generator = GeneratorResNet(input_shape, n_residual_blocks)
-    if cuda:
-        generator = generator.cuda()
-
-    generator.load_state_dict(torch.load("models/CycleGAN/checkpoint/generator.pth"))
-
-    # 생성부
-    for filename in os.listdir(os.path.join(input_path)):
-        sample_images(os.path.join(input_path, filename), filename, generator)
-"""

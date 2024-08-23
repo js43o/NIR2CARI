@@ -113,7 +113,7 @@ if __name__ == "__main__":
         # pix2pixHD
         colorized = pix2pixHD.inference(data["label"], data["inst"], data["image"])
         colorized = util.tensor2im(colorized.data[0])
-        cv2.imwrite("output/%s_color.png" % filename, colorized[..., ::-1])
+        # cv2.imwrite("output/%s_color.png" % filename, colorized[..., ::-1])
 
         # vtoonify
         paras = get_video_crop_parameter(
@@ -167,4 +167,3 @@ if __name__ == "__main__":
         # cyclegan
         synthesized = sample_images(caricatured, cyclegan)
         cv2.imwrite("output/%s.png" % filename, synthesized)
-        # cv2.imwrite("%s/%s.png" % (output_path, filename), synthesized)
