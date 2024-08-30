@@ -6,7 +6,6 @@ import math
 import torch
 from torch import autograd
 from torch.nn import functional as F
-import numpy as np
 
 from model.stylegan.distributed import reduce_sum
 from model.stylegan.op import upfirdn2d

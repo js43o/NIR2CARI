@@ -1,4 +1,3 @@
-import cv2
 import numpy as np
 
 
@@ -27,32 +26,5 @@ def yiq_from_image(img):
     return Y, I, Q
 
 
-def extend_triple(channel):
+def extend_to_three_channel(channel):
     return np.tile(channel, reps=[3, 1, 1]).transpose(1, 2, 0)
-
-
-def get_luminance_content_and_style(content, style):
-    c_Y, c_I, c_Q = yiq_from_image(content)
-    s_Y, s_I, s_Q = yiq_from_image(style)
-
-    s_Y_mean, c_Y_mean = np.mean(s_Y), np.mean(c_Y)
-    s_Y_std, c_Y_std = np.std(s_Y), np.std(c_Y)
-    # s_Y = (c_Y_std / (s_Y_std + 1e9)) * (s_Y - s_Y_mean) + c_Y_mean
-
-    c_luminance = extend_triple(c_Y) / 255.0
-    s_luminance = extend_triple(s_Y) / 255.0
-
-    return (c_luminance, s_luminance)
-
-
-""" 
-path = "./cari_to_pic/train/A/Abdel_Nasser_Assidi_0001_vtoonify_t.jpg"
-img = cv2.imread(path)
-
-a, b = get_luminance_content_and_style(img, img)
-
-cv2.imshow("", a)
-
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-"""

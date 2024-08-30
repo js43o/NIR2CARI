@@ -1,4 +1,4 @@
-import os
+import cv2
 import numpy as np
 import torch
 import torchvision.transforms as transforms
@@ -19,7 +19,7 @@ transform = transforms.Compose(
 def sample_images(image, generator):
     Y, I, Q = yiq_from_image(image)
 
-    luminance = extend_triple(Y) / 255.0
+    luminance = extend_to_three_channel(Y) / 255.0
     real = transform(luminance).type(Tensor).unsqueeze(dim=0)
     generated = generator(real)
 

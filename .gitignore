@@ -1,7 +1,6 @@
-datasets*
-checkpoints*
-output*
-landmarked*
+dataset/*
+output/*
+__pycache__
 temp*
-*.pyc
 *.pt
+*.pyc
