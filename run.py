@@ -7,11 +7,7 @@ from options.vtoonify import Options as vtoonify_opts
 from models.VToonify.model.vtoonify import VToonify
 from models.VToonify.model.bisenet.model import BiSeNet
 from models.VToonify.model.encoder.align_all_parallel import align_face
-from models.VToonify.util import (
-    save_image,
-    load_psp_standalone,
-    get_video_crop_parameter,
-)
+from models.VToonify.util import *
 
 from models.CycleGAN.models import *
 from models.CycleGAN.luminance import *
@@ -113,7 +109,7 @@ if __name__ == "__main__":
         # pix2pixHD
         colorized = pix2pixHD.inference(data["label"], data["inst"], data["image"])
         colorized = util.tensor2im(colorized.data[0])
-        # cv2.imwrite("output/%s_color.png" % filename, colorized[..., ::-1])
+        cv2.imwrite("output/%s_colorized.png" % filename, colorized[..., ::-1])
 
         # vtoonify
         paras = get_video_crop_parameter(
@@ -163,6 +159,7 @@ if __name__ == "__main__":
             ).astype(np.uint8),
             cv2.COLOR_RGB2BGR,
         )
+        cv2.imwrite("output/%s_caricatured.png" % filename, caricatured)
 
         # cyclegan
         synthesized = sample_images(caricatured, cyclegan)

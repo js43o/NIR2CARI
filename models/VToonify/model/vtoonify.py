@@ -124,7 +124,7 @@ class VToonify(nn.Module):
             # 인코더의 각 중간 레이어들의 특징을 동일 해상도를 갖는 생성자의 레이어에 전달
             if 2 ** (5 + ((_index - 1) // 2)) <= self.in_size:  # 32, 64, 128, 256
                 fusion_index = (_index - 1) // 2  # 0, 1, 2, 3
-                f_E = encoder_features[fusion_index]
+                f_E = encoder_features[fusion_index] * 1
 
                 # 현재 레이어의 특징과 상응하는 인코더의 특징을 concatenation한 뒤 융합
                 out = self.fusion_out[fusion_index](torch.cat([out, f_E], dim=1))
