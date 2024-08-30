@@ -18,18 +18,15 @@ transform = transforms.Compose(
 
 def sample_images(image, generator):
     Y, I, Q = yiq_from_image(image)
-    # cv2.imwrite("%s/%s_Y.png" % (output_path, filename), np.array(Y))
 
     luminance = extend_triple(Y) / 255.0
     real = transform(luminance).type(Tensor).unsqueeze(dim=0)
     generated = generator(real)
 
     generated = generated.detach().cpu().squeeze().permute(1, 2, 0).numpy() * 120 + 120
-    # cv2.imwrite("%s/%s_luminance.png" % (output_path, filename), generated)
     generated = cv2.cvtColor(generated, cv2.COLOR_BGR2GRAY)
 
     R, G, B = yiq_to_rgb(generated, I, Q)
     synthesized = np.array([B, G, R]).transpose(1, 2, 0).clip(0, 255).astype(np.uint8)
-    # cv2.imwrite("%s/%s.png" % (output_path, filename), synthesized)
 
     return synthesized

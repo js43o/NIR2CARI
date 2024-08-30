@@ -1,4 +1,3 @@
-from options.pix2pixHD import Options as pix2pix_opts
 from models.pix2pixHD.data.data_loader import CreateDataLoader
 from models.pix2pixHD.models.models import create_model
 from models.pix2pixHD.util import util
@@ -13,20 +12,32 @@ from models.CycleGAN.luminance import *
 from models.CycleGAN.inference import *
 
 import os
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torchvision import transforms
-import numpy as np
 import dlib
+import argparse
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-pix2pix_opt = pix2pix_opts()
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--gpu_ids", type=str, help="which gpu when going inference", default="0"
+)
+parser.add_argument(
+    "--dataroot", type=str, help="path where input images exist", default="dataset"
+)
+parser.add_argument(
+    "--output", type=str, help="path where output images will be", default="outout"
+)
+options = parser.parse_args()
+options.gpu_ids = list(map(lambda x: int(x), options.gpu_ids.split(",")))
 
 
 def load_models():
     # pix2pixHD
-    pix2pixHD = create_model(pix2pix_opt)
+    pix2pixHD = create_model(options)
 
     # vtoonify
     transform = transforms.Compose(
@@ -93,7 +104,7 @@ def load_models():
 
 
 if __name__ == "__main__":
-    data_loader = CreateDataLoader(pix2pix_opt)
+    data_loader = CreateDataLoader(options)
     dataset = data_loader.load_data()
     os.makedirs("output", exist_ok=True)
 
@@ -101,15 +112,15 @@ if __name__ == "__main__":
         load_models()
     )
 
-    print("models loaded")
-    # generates from images
+    print("All models are successfully loaded")
+
     for i, data in enumerate(dataset):
         filename = os.path.basename(data["path"][0]).split(".")[0]
 
         # pix2pixHD
         colorized = pix2pixHD.inference(data["label"], data["inst"], data["image"])
         colorized = util.tensor2im(colorized.data[0])
-        cv2.imwrite("output/%s_colorized.png" % filename, colorized[..., ::-1])
+        # cv2.imwrite("output/%s_colorized.png" % filename, colorized[..., ::-1])
 
         # vtoonify
         paras = get_video_crop_parameter(colorized, landmarkpredictor)
@@ -157,7 +168,7 @@ if __name__ == "__main__":
             ).astype(np.uint8),
             cv2.COLOR_RGB2BGR,
         )
-        cv2.imwrite("output/%s_caricatured.png" % filename, caricatured)
+        # cv2.imwrite("output/%s_caricatured.png" % filename, caricatured)
 
         # cyclegan
         synthesized = sample_images(caricatured, cyclegan)
