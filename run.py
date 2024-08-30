@@ -3,7 +3,6 @@ from models.pix2pixHD.data.data_loader import CreateDataLoader
 from models.pix2pixHD.models.models import create_model
 from models.pix2pixHD.util import util
 
-from options.vtoonify import Options as vtoonify_opts
 from models.VToonify.model.vtoonify import VToonify
 from models.VToonify.model.bisenet.model import BiSeNet
 from models.VToonify.model.encoder.align_all_parallel import align_face
@@ -23,7 +22,6 @@ import dlib
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 pix2pix_opt = pix2pix_opts()
-vtoonify_opt = vtoonify_opts()
 
 
 def load_models():
@@ -40,9 +38,10 @@ def load_models():
 
     vtoonify = VToonify()
     vtoonify.load_state_dict(
-        torch.load(vtoonify_opt.ckpt, map_location=lambda storage, loc: storage)[
-            "g_ema"
-        ],
+        torch.load(
+            "models/VToonify/checkpoint/vtoonify_t.pt",
+            map_location=lambda storage, loc: storage,
+        )["g_ema"],
         strict=False,
     )
     vtoonify.to(device)
@@ -50,7 +49,8 @@ def load_models():
     parsingpredictor = BiSeNet(n_classes=19)
     parsingpredictor.load_state_dict(
         torch.load(
-            vtoonify_opt.faceparsing_path, map_location=lambda storage, loc: storage
+            "models/VToonify/checkpoint/faceparsing.pth",
+            map_location=lambda storage, loc: storage,
         )
     )
     parsingpredictor.to(device).eval()
@@ -70,7 +70,7 @@ def load_models():
         open(face_landmarker_model, "wb").write(data)
     landmarkpredictor = dlib.shape_predictor(face_landmarker_model)
 
-    pspencoder = load_psp_standalone(vtoonify_opt.style_encoder_path, device)
+    pspencoder = load_psp_standalone("models/VToonify/checkpoint/encoder.pt", device)
 
     # cyclegan
     input_shape = (3, 1024, 1024)
@@ -112,9 +112,7 @@ if __name__ == "__main__":
         cv2.imwrite("output/%s_colorized.png" % filename, colorized[..., ::-1])
 
         # vtoonify
-        paras = get_video_crop_parameter(
-            colorized, landmarkpredictor, vtoonify_opt.padding
-        )
+        paras = get_video_crop_parameter(colorized, landmarkpredictor)
         if paras is not None:
             scale = 1
             kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
