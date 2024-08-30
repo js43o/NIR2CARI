@@ -50,7 +50,7 @@ def load_models():
     vtoonify = VToonify()
     vtoonify.load_state_dict(
         torch.load(
-            "models/VToonify/checkpoint/vtoonify_t.pt",
+            "models/VToonify/checkpoints/vtoonify_t.pt",
             map_location=lambda storage, loc: storage,
         )["g_ema"],
         strict=False,
@@ -60,14 +60,14 @@ def load_models():
     parsingpredictor = BiSeNet(n_classes=19)
     parsingpredictor.load_state_dict(
         torch.load(
-            "models/VToonify/checkpoint/faceparsing.pth",
+            "models/VToonify/checkpoints/faceparsing.pth",
             map_location=lambda storage, loc: storage,
         )
     )
     parsingpredictor.to(device).eval()
 
     face_landmarker_model = (
-        "models/VToonify/checkpoint/shape_predictor_68_face_landmarks.dat"
+        "models/VToonify/checkpoints/shape_predictor_68_face_landmarks.dat"
     )
     if not os.path.exists(face_landmarker_model):
         import wget, bz2
@@ -81,7 +81,7 @@ def load_models():
         open(face_landmarker_model, "wb").write(data)
     landmarkpredictor = dlib.shape_predictor(face_landmarker_model)
 
-    pspencoder = load_psp_standalone("models/VToonify/checkpoint/encoder.pt", device)
+    pspencoder = load_psp_standalone("models/VToonify/checkpoints/encoder.pt", device)
 
     # cyclegan
     input_shape = (3, 1024, 1024)
@@ -91,7 +91,7 @@ def load_models():
     if device == "cuda":
         cyclegan = cyclegan.cuda()
 
-    cyclegan.load_state_dict(torch.load("models/CycleGAN/checkpoint/generator.pth"))
+    cyclegan.load_state_dict(torch.load("models/CycleGAN/checkpoints/generator.pth"))
 
     return (
         pix2pixHD,
