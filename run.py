@@ -17,6 +17,7 @@ import torch
 import torch.nn.functional as F
 import dlib
 import argparse
+import time
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -29,9 +30,6 @@ parser.add_argument(
 )
 parser.add_argument(
     "--output", type=str, help="path where output images will be", default="output"
-)
-parser.add_argument(
-    "--input_size", type=int, help="width or height of input images", default="outout"
 )
 options = parser.parse_args()
 options.gpu_ids = list(map(lambda x: int(x), options.gpu_ids.split(",")))
@@ -108,8 +106,10 @@ if __name__ == "__main__":
     )
 
     print("All models are successfully loaded")
+    times = []
 
     for i, data in enumerate(dataset):
+        time_s = time.time()
         filename = os.path.basename(data["path"][0]).split(".")[0]
 
         # pix2pixHD
@@ -165,8 +165,13 @@ if __name__ == "__main__":
             ).astype(np.uint8),
             cv2.COLOR_RGB2BGR,
         )
-        # cv2.imwrite("%s/%s_caricatured.png" % (options.output, filename), caricatured)
+        cv2.imwrite("%s/%s_caricatured.png" % (options.output, filename), caricatured)
 
         # cyclegan
         synthesized = sample_images(caricatured, cyclegan)
         cv2.imwrite("%s/%s.png" % (options.output, filename), synthesized)
+
+        times.append(time.time() - time_s)
+        # print(times[-1])
+
+    # print("avg =", sum(times) / len(times))
