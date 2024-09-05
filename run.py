@@ -15,7 +15,6 @@ import os
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torchvision import transforms
 import dlib
 import argparse
 
@@ -29,7 +28,10 @@ parser.add_argument(
     "--dataroot", type=str, help="path where input images exist", default="dataset"
 )
 parser.add_argument(
-    "--output", type=str, help="path where output images will be", default="outout"
+    "--output", type=str, help="path where output images will be", default="output"
+)
+parser.add_argument(
+    "--input_size", type=int, help="width or height of input images", default="outout"
 )
 options = parser.parse_args()
 options.gpu_ids = list(map(lambda x: int(x), options.gpu_ids.split(",")))
@@ -40,13 +42,6 @@ def load_models():
     pix2pixHD = create_model(options)
 
     # vtoonify
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-        ]
-    )
-
     vtoonify = VToonify()
     vtoonify.load_state_dict(
         torch.load(
@@ -106,7 +101,7 @@ def load_models():
 if __name__ == "__main__":
     data_loader = CreateDataLoader(options)
     dataset = data_loader.load_data()
-    os.makedirs("output", exist_ok=True)
+    os.makedirs(options.output, exist_ok=True)
 
     pix2pixHD, vtoonify, parsingpredictor, landmarkpredictor, pspencoder, cyclegan = (
         load_models()
@@ -120,7 +115,9 @@ if __name__ == "__main__":
         # pix2pixHD
         colorized = pix2pixHD.inference(data["label"], data["inst"], data["image"])
         colorized = util.tensor2im(colorized.data[0])
-        # cv2.imwrite("output/%s_colorized.png" % filename, colorized[..., ::-1])
+        cv2.imwrite(
+            "%s/%s_colorized.png" % (options.output, filename), colorized[..., ::-1]
+        )
 
         # vtoonify
         paras = get_video_crop_parameter(colorized, landmarkpredictor)
@@ -168,8 +165,8 @@ if __name__ == "__main__":
             ).astype(np.uint8),
             cv2.COLOR_RGB2BGR,
         )
-        # cv2.imwrite("output/%s_caricatured.png" % filename, caricatured)
+        # cv2.imwrite("%s/%s_caricatured.png" % (options.output, filename), caricatured)
 
         # cyclegan
         synthesized = sample_images(caricatured, cyclegan)
-        cv2.imwrite("output/%s.png" % filename, synthesized)
+        cv2.imwrite("%s/%s.png" % (options.output, filename), synthesized)
