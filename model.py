@@ -17,13 +17,10 @@ import dlib
 
 
 class NIR2CARI(nn.Module):
-  def __init__(self, gpu_ids, dataroot, output):
+  def __init__(self, options):
     super(NIR2CARI, self).__init__()
+    self.opt = options
     self.device = "cuda" if torch.cuda.is_available() else "cpu"
-    self.gpu_ids = list(map(lambda x: int(x), gpu_ids.split(",")))
-    self.dataroot = dataroot
-    self.output = output
-    self.opt = {"gpu_ids": gpu_ids, "dataroot": dataroot, "output": output}
     self.load_models()
   
   def load_models(self):
@@ -54,20 +51,19 @@ class NIR2CARI(nn.Module):
       self.pspencoder = load_psp_standalone("models/VToonify/checkpoints/encoder.pt", self.device)
 
       # cyclegan
-      self.cyclegan = GeneratorResNet(input_shape=(3, 1024, 1024), n_residual_blocks=0)
+      self.cyclegan = GeneratorResNet((3, 1024, 1024), 9)
       if self.device == "cuda":
-          cyclegan = cyclegan.cuda()
+          self.cyclegan = self.cyclegan.cuda()
       self.cyclegan.load_state_dict(torch.load("models/CycleGAN/checkpoints/generator.pth"))
       
       print("All models are successfully loaded")
   
   def forward(self, data):
-      filename = data["name"]
       # pix2pixHD
       colorized = self.pix2pixHD.inference(data["label"], data["inst"], data["image"])
       colorized = util.tensor2im(colorized.data[0])
       cv2.imwrite(
-          "%s/%s_colorized.png" % (self.output, filename), colorized[..., ::-1]
+          "%s/%s_colorized.png" % (self.opt.output, data["filename"]), colorized[..., ::-1]
       )
 
       # vtoonify
@@ -116,11 +112,11 @@ class NIR2CARI(nn.Module):
           ).astype(np.uint8),
           cv2.COLOR_RGB2BGR,
       )
-      cv2.imwrite("%s/%s_caricatured.png" % (self.output, filename), caricatured)
+      cv2.imwrite("%s/%s_caricatured.png" % (self.opt.output, data["filename"]), caricatured)
 
       # cyclegan
       synthesized = sample_images(caricatured, self.cyclegan)
-      cv2.imwrite("%s/%s.png" % (self.output, filename), synthesized)
+      cv2.imwrite("%s/%s.png" % (self.opt.output, data["filename"]), synthesized)
       
       return synthesized
 
