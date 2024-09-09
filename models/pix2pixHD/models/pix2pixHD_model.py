@@ -1,129 +1,83 @@
 import numpy as np
 import torch
-from torch.autograd import Variable
+from torch import nn
 from .base_model import BaseModel
 from . import networks
 import warnings
+from typing import Optional
+from torch import Tensor
+import os
+import sys
 
 warnings.filterwarnings("ignore", "volatile")
 
 
-class Pix2PixHDModel(BaseModel):
+class Pix2PixHDModel(nn.Module):
+    @torch.jit.export
     def name(self):
         return "Pix2PixHDModel"
 
-    def init_loss_filter(self, use_gan_feat_loss, use_vgg_loss):
-        flags = (True, use_gan_feat_loss, use_vgg_loss, True, True)
-
-        def loss_filter(g_gan, g_gan_feat, g_vgg, d_real, d_fake):
-            return [
-                l
-                for (l, f) in zip((g_gan, g_gan_feat, g_vgg, d_real, d_fake), flags)
-                if f
-            ]
-
-        return loss_filter
-
-    def initialize(self, opt):
-        BaseModel.initialize(self, opt)
-        torch.backends.cudnn.benchmark = True
+    def __init__(self):
+        self.opt = {}
+        self.gpu_ids = []
+        self.Tensor = torch.cuda.FloatTensor if self.gpu_ids else torch.Tensor
+        self.save_dir = os.path.join("models/pix2pixHD/checkpoints")
         self.use_features = False
         self.gen_features = False
+        self.netG = None
+
+    @torch.jit.export
+    def initialize(self, opt):
+        # BaseModel.initialize(self, opt)
+        self.opt = opt
+        self.gpu_ids = opt["gpu_ids"]
+
+        torch.backends.cudnn.benchmark = True
 
         ##### define networks
         # Generator network
         netG_input_nc = 3
         self.netG = networks.define_G(
-            netG_input_nc,
-            3,
-            64,
-            "global",
-            4,
-            9,
-            1,
-            3,
-            "instance",
-            gpu_ids=self.gpu_ids,
+            netG_input_nc, 3, 64, "global", 4, 9, 1, 3, "instance", gpu_ids=self.gpu_ids
         )
 
         # load networks
         self.load_network(self.netG, "G", "latest")
 
+    @torch.jit.export
     def encode_input(
-        self, label_map, inst_map=None, real_image=None, feat_map=None, infer=False
+        self,
+        label_map,
+        inst_map=None,
+        real_image=None,
+        feat_map: Optional[Tensor] = None,
+        infer: bool = False,
     ):
         input_label = label_map.data.cuda()
 
         # real images for training
         if real_image is not None:
-            real_image = Variable(real_image.data.cuda())
+            real_image = real_image.data.cuda()
 
         return input_label, inst_map, real_image, feat_map
 
-    def discriminate(self, input_label, test_image, use_pool=False):
-        input_concat = torch.cat((input_label, test_image.detach()), dim=1)
-        if use_pool:
-            fake_query = self.fake_pool.query(input_concat)
-            return self.netD.forward(fake_query)
-        else:
-            return self.netD.forward(input_concat)
-
-    def forward(self, label, inst, image, feat, infer=False):
+    def forward(self, label, inst, image, feat, infer: bool = False):
         # Encode Inputs
         input_label, inst_map, real_image, feat_map = self.encode_input(
-            label, inst, image, feat
+            label, inst, image, feat, infer
         )
 
         # Fake Generation
         input_concat = input_label
         fake_image = self.netG.forward(input_concat)
 
-        # Fake Detection and Loss
-        pred_fake_pool = self.discriminate(input_label, fake_image, use_pool=True)
-        loss_D_fake = self.criterionGAN(pred_fake_pool, False)
+        return fake_image
 
-        # Real Detection and Loss
-        pred_real = self.discriminate(input_label, real_image)
-        loss_D_real = self.criterionGAN(pred_real, True)
-
-        # GAN loss (Fake Passability Loss)
-        pred_fake = self.netD.forward(torch.cat((input_label, fake_image), dim=1))
-        loss_G_GAN = self.criterionGAN(pred_fake, True)
-
-        # GAN feature matching loss
-        loss_G_GAN_Feat = 0
-        if not self.opt.no_ganFeat_loss:
-            feat_weights = 4.0 / (self.opt.n_layers_D + 1)
-            D_weights = 1.0 / self.opt.num_D
-            for i in range(self.opt.num_D):
-                for j in range(len(pred_fake[i]) - 1):
-                    loss_G_GAN_Feat += (
-                        D_weights
-                        * feat_weights
-                        * self.criterionFeat(pred_fake[i][j], pred_real[i][j].detach())
-                        * self.opt.lambda_feat
-                    )
-
-        # VGG feature matching loss
-        loss_G_VGG = 0
-        if not self.opt.no_vgg_loss:
-            loss_G_VGG = (
-                self.criterionVGG(fake_image, real_image) * self.opt.lambda_feat
-            )
-
-        # Only return the fake_B image if necessary to save BW
-        return [
-            self.loss_filter(
-                loss_G_GAN, loss_G_GAN_Feat, loss_G_VGG, loss_D_real, loss_D_fake
-            ),
-            None if not infer else fake_image,
-        ]
-
+    @torch.jit.export
     def inference(self, label, inst, image=None):
         # Encode Inputs
-        image = Variable(image) if image is not None else None
         input_label, inst_map, real_image, _ = self.encode_input(
-            Variable(label), Variable(inst), image, infer=True
+            label, inst, image, None, True
         )
 
         # Fake Generation
@@ -136,57 +90,62 @@ class Pix2PixHDModel(BaseModel):
             fake_image = self.netG.forward(input_concat)
         return fake_image
 
-    def encode_features(self, image, inst):
-        image = Variable(image.cuda(), volatile=True)
-        feat_num = 3
-        h, w = inst.size()[2], inst.size()[3]
-        block_num = 32
-        feat_map = self.netE.forward(image, inst.cuda())
-        inst_np = inst.cpu().numpy().astype(int)
-        feature = {}
-        for i in np.unique(inst_np):
-            label = i if i < 1000 else i // 1000
-            idx = (inst == int(i)).nonzero()
-            num = idx.size()[0]
-            idx = idx[num // 2, :]
-            val = np.zeros((1, feat_num + 1))
-            for k in range(feat_num):
-                val[0, k] = feat_map[idx[0], idx[1] + k, idx[2], idx[3]].data[0]
-            val[0, feat_num] = float(num) / (h * w // block_num)
-            feature[label] = np.append(feature[label], val, axis=0)
-        return feature
+    # helper loading function that can be used by subclasses
+    def load_network(self, network, network_label, epoch_label, save_dir=""):
+        save_filename = "%s_net_%s.pth" % (epoch_label, network_label)
+        if not save_dir:
+            save_dir = self.save_dir
+        save_path = os.path.join(save_dir, save_filename)
+        if not os.path.isfile(save_path):
+            print("%s not exists yet!" % save_path)
+            if network_label == "G":
+                raise ("Generator must exist!")
+        else:
+            # network.load_state_dict(torch.load(save_path))
+            try:
+                network.load_state_dict(torch.load(save_path))
+            except:
+                pretrained_dict = torch.load(save_path)
+                model_dict = network.state_dict()
+                try:
+                    pretrained_dict = {
+                        k: v for k, v in pretrained_dict.items() if k in model_dict
+                    }
+                    network.load_state_dict(pretrained_dict)
+                    if self.opt.verbose:
+                        print(
+                            "Pretrained network %s has excessive layers; Only loading layers that are used"
+                            % network_label
+                        )
+                except:
+                    print(
+                        "Pretrained network %s has fewer layers; The following are not initialized:"
+                        % network_label
+                    )
+                    for k, v in pretrained_dict.items():
+                        if v.size() == model_dict[k].size():
+                            model_dict[k] = v
 
-    def get_edges(self, t):
-        edge = torch.cuda.ByteTensor(t.size()).zero_()
-        edge[:, :, :, 1:] = edge[:, :, :, 1:] | (t[:, :, :, 1:] != t[:, :, :, :-1])
-        edge[:, :, :, :-1] = edge[:, :, :, :-1] | (t[:, :, :, 1:] != t[:, :, :, :-1])
-        edge[:, :, 1:, :] = edge[:, :, 1:, :] | (t[:, :, 1:, :] != t[:, :, :-1, :])
-        edge[:, :, :-1, :] = edge[:, :, :-1, :] | (t[:, :, 1:, :] != t[:, :, :-1, :])
+                    if sys.version_info >= (3, 0):
+                        not_initialized = set()
+                    else:
+                        from sets import Set
 
-        return edge.float()
+                        not_initialized = Set()
 
-    def update_fixed_params(self):
-        # after fixing the global generator for a number of iterations, also start finetuning it
-        params = list(self.netG.parameters())
-        self.optimizer_G = torch.optim.Adam(
-            params, lr=self.opt.lr, betas=(self.opt.beta1, 0.999)
-        )
-        if self.opt.verbose:
-            print("------------ Now also finetuning global generator -----------")
+                    for k, v in model_dict.items():
+                        if (
+                            k not in pretrained_dict
+                            or v.size() != pretrained_dict[k].size()
+                        ):
+                            not_initialized.add(k.split(".")[0])
 
-    def update_learning_rate(self):
-        lrd = self.opt.lr / self.opt.niter_decay
-        lr = self.old_lr - lrd
-        for param_group in self.optimizer_D.param_groups:
-            param_group["lr"] = lr
-        for param_group in self.optimizer_G.param_groups:
-            param_group["lr"] = lr
-        if self.opt.verbose:
-            print("update learning rate: %f -> %f" % (self.old_lr, lr))
-        self.old_lr = lr
+                    print(sorted(not_initialized))
+                    network.load_state_dict(model_dict)
 
 
+@torch.jit.export
 class InferenceModel(Pix2PixHDModel):
     def forward(self, inp):
-        label, inst = inp
+        label, inst = inp[0], inp[1]
         return self.inference(label, inst)

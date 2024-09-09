@@ -7,8 +7,8 @@ from PIL import Image
 class AlignedDataset(BaseDataset):
     def initialize(self, opt):
         self.opt = opt
-        self.root = opt.dataroot
-        self.dir_A = os.path.join(opt.dataroot)
+        self.root = opt["dataroot"]
+        self.dir_A = os.path.join(opt["dataroot"])
         self.A_paths = sorted(make_dataset(self.dir_A))
         self.dataset_size = len(self.A_paths)
 
