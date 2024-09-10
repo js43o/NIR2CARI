@@ -1,4 +1,4 @@
-from models.pix2pixHD.models.models import create_model
+from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
 from models.pix2pixHD.util import util
 
 from models.VToonify.model.vtoonify import VToonify
@@ -27,7 +27,7 @@ class NIR2CARI(nn.Module):
 
     def load_models(self):
         # pix2pixHD
-        self.pix2pixHD = create_model(self.opt)
+        self.pix2pixHD = Pix2PixHDModel(self.opt)
 
         # vtoonify
         self.vtoonify = VToonify()
@@ -68,7 +68,7 @@ class NIR2CARI(nn.Module):
 
     def forward(self, data):
         # pix2pixHD
-        colorized = self.pix2pixHD.inference(data["label"], data["inst"], data["image"])
+        colorized = self.pix2pixHD(data["label"])
         colorized = util.tensor2im(colorized.data[0])
         cv2.imwrite(
             "%s/%s_colorized.png" % (self.opt["output"], data["filename"]),

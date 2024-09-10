@@ -1,5 +1,4 @@
 from model import NIR2CARI
-from models.pix2pixHD.models.models import create_model
 from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
 from models.VToonify.model.vtoonify import VToonify
 from models.CycleGAN.models import *
@@ -14,9 +13,12 @@ import torch
 
 opt = {"dataroot": "dataset", "output": "output", "gpu_ids": [0]}
 
-model = Pix2PixHDModel()
-model.initialize(opt)
+model = Pix2PixHDModel(opt)
 module = torch.jit.script(model)
-module.save("a.pt")
-
 module.save("nir2cari.pt")
+
+""" loaded = torch.jit.load("nir2cari.pt")
+
+print(loaded)
+print(loaded.code)
+ """
