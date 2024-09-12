@@ -37,6 +37,5 @@ if __name__ == "__main__":
         synthesized = nir2cari(data)
 
         times.append(time.time() - time_s)
-        # print(times[-1])
 
-    print("avg =", sum(times) / len(times))
+    # print("avg =", sum(times) / len(times))

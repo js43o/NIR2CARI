@@ -14,6 +14,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import dlib
+import time
 
 
 class NIR2CARI(nn.Module):
@@ -70,12 +71,13 @@ class NIR2CARI(nn.Module):
         # pix2pixHD
         colorized = self.pix2pixHD(data["label"])
         colorized = util.tensor2im(colorized.data[0])
-        cv2.imwrite(
-            "%s/%s_colorized.png" % (self.opt["output"], data["filename"]),
-            colorized[..., ::-1],
-        )
+        # cv2.imwrite(
+        #     "%s/%s_colorized.png" % (self.opt["output"], data["filename"]),
+        #     colorized[..., ::-1],
+        # )
 
         # vtoonify
+        time_s = time.time()
         paras = get_video_crop_parameter(colorized, self.landmarkpredictor)
         if paras is not None:
             scale = 1
@@ -121,10 +123,11 @@ class NIR2CARI(nn.Module):
             ).astype(np.uint8),
             cv2.COLOR_RGB2BGR,
         )
-        cv2.imwrite(
-            "%s/%s_caricatured.png" % (self.opt["output"], data["filename"]),
-            caricatured,
-        )
+        print(time.time() - time_s)
+        # cv2.imwrite(
+        #     "%s/%s_caricatured.png" % (self.opt["output"], data["filename"]),
+        #     caricatured,
+        # )
 
         # cyclegan
         synthesized = sample_images(caricatured, self.cyclegan)
