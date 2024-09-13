@@ -1,10 +1,9 @@
-from collections import abc
 import os
-
 import torch
 from torch.nn import functional as F
 from torch.autograd import Function
 from torch.utils.cpp_extension import load
+from typing import Tuple
 
 
 module_path = os.path.dirname(__file__)
@@ -146,21 +145,8 @@ class UpFirDn2d(Function):
         return grad_input, None, None, None, None
 
 
-def upfirdn2d(input, kernel, up=1, down=1, pad=(0, 0)):
-    if not isinstance(up, abc.Iterable):
-        up = (up, up)
-
-    if not isinstance(down, abc.Iterable):
-        down = (down, down)
-
-    if len(pad) == 2:
-        pad = (pad[0], pad[1], pad[0], pad[1])
-
-    if input.device.type == "cpu":
-        out = upfirdn2d_native(input, kernel, *up, *down, *pad)
-
-    else:
-        out = UpFirDn2d.apply(input, kernel, up, down, pad)
+def upfirdn2d(input, kernel, up: int = 1, down: int = 1, pad: Tuple[int, int] = (0, 0)):
+    out = UpFirDn2d.apply(input, kernel, (up, up), (down, down), (pad[0], pad[1], pad[0], pad[1]))
 
     return out
 

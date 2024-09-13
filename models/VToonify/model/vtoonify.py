@@ -31,7 +31,6 @@ class VToonify(nn.Module):
         channel_multiplier=2,
         num_res_layers=6,
     ):
-
         super().__init__()
 
         # StyleGANv2, with weights being fixed
@@ -44,47 +43,61 @@ class VToonify(nn.Module):
         channels = self.generator.channels
 
         # encoder
-        num_styles = int(np.log2(out_size)) * 2 - 2
-        encoder_res = [2**i for i in range(int(np.log2(in_size)), 4, -1)]
-        self.encoder = nn.ModuleList()
-        self.encoder.append(
-            nn.Sequential(
-                nn.Conv2d(img_channels + 19, 32, 3, 1, 1, bias=True),
-                nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                nn.Conv2d(32, channels[in_size], 3, 1, 1, bias=True),
-                nn.LeakyReLU(negative_slope=0.2, inplace=True),
-            )
+        self.encoder = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(img_channels + 19, 32, 3, 1, 1, bias=True),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                    nn.Conv2d(32, 128, 3, 1, 1, bias=True),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                ),
+                nn.Sequential(
+                    nn.Conv2d(128, 256, 3, 2, 1, bias=True),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                    nn.Conv2d(256, 256, 3, 1, 1, bias=True),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                ),
+                nn.Sequential(
+                    nn.Conv2d(256, 512, 3, 2, 1, bias=True),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                    nn.Conv2d(512, 512, 3, 1, 1, bias=True),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                ),
+                nn.Sequential(
+                    nn.Conv2d(512, 512, 3, 2, 1, bias=True),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                    nn.Conv2d(512, 512, 3, 1, 1, bias=True),
+                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                ),
+                nn.Sequential(
+                    VToonifyResBlock(512),
+                    VToonifyResBlock(512),
+                    VToonifyResBlock(512),
+                    VToonifyResBlock(512),
+                    VToonifyResBlock(512),
+                    VToonifyResBlock(512),
+                ),
+                nn.Conv2d(512, img_channels, 1, 1, 0, bias=True),
+            ]
         )
 
-        for res in encoder_res:
-            in_channels = channels[res]
-            if res > 32:
-                out_channels = channels[res // 2]
-                block = nn.Sequential(
-                    nn.Conv2d(in_channels, out_channels, 3, 2, 1, bias=True),
-                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                    nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=True),
-                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                )
-                self.encoder.append(block)
-            else:
-                layers = []
-                for _ in range(num_res_layers):
-                    layers.append(VToonifyResBlock(in_channels))
-                self.encoder.append(nn.Sequential(*layers))
-                block = nn.Conv2d(in_channels, img_channels, 1, 1, 0, bias=True)
-                self.encoder.append(block)
-
         # trainable fusion module
-        self.fusion_out = nn.ModuleList()
-        self.fusion_skip = nn.ModuleList()
-        for res in encoder_res[::-1]:
-            num_channels = channels[res]
-            self.fusion_out.append(
-                nn.Conv2d(num_channels * 2, num_channels, 3, 1, 1, bias=True)
-            )
-
-            self.fusion_skip.append(nn.Conv2d(num_channels + 3, 3, 3, 1, 1, bias=True))
+        self.fusion_out = nn.ModuleList(
+            [
+                nn.Conv2d(1024, 512, 3, 1, 1, bias=True),
+                nn.Conv2d(1024, 512, 3, 1, 1, bias=True),
+                nn.Conv2d(512, 256, 3, 1, 1, bias=True),
+                nn.Conv2d(256, 128, 3, 1, 1, bias=True),
+            ]
+        )
+        self.fusion_skip = nn.ModuleList(
+            [
+                nn.Conv2d(515, 3, 3, 1, 1, bias=True),
+                nn.Conv2d(515, 3, 3, 1, 1, bias=True),
+                nn.Conv2d(259, 3, 3, 1, 1, bias=True),
+                nn.Conv2d(131, 3, 3, 1, 1, bias=True),
+            ]
+        )
 
     def forward(self, x, style):
         # map style to W+ space
@@ -96,43 +109,86 @@ class VToonify(nn.Module):
         feat = x
         encoder_features = []
 
-        for i, block in enumerate(self.encoder[:-2]):
-            feat = block(feat)
-            encoder_features.append(feat)
+        # encode
+        feat = self.encoder[0](feat)
+        encoder_features.append(feat)
+        feat = self.encoder[1](feat)
+        encoder_features.append(feat)
+        feat = self.encoder[2](feat)
+        encoder_features.append(feat)
+        feat = self.encoder[3](feat)
+        encoder_features.append(feat)
+        feat = self.encoder[4](feat)
+
         encoder_features = encoder_features[::-1]
 
-        for ii, block in enumerate(self.encoder[-2]):
-            feat = block(feat)
-
         out = feat
-        skip = self.encoder[-1](feat)
+        skip = self.encoder[5](feat)
 
-        _index = 1
-        m_Es = []
-        for conv1, conv2, to_rgb in zip(
-            self.stylegan().convs[6::2],
-            self.stylegan().convs[7::2],
-            self.stylegan().to_rgbs[3:],
-        ):
-            if 2 ** (5 + ((_index - 1) // 2)) <= self.in_size:
-                fusion_index = (_index - 1) // 2
-                f_E = encoder_features[fusion_index] * 1
+        self.stylegan().convs
 
-                out = self.fusion_out[fusion_index](torch.cat([out, f_E], dim=1))
-                skip = self.fusion_skip[fusion_index](torch.cat([skip, f_E], dim=1))
+        # decode
+        f_E = encoder_features[0]
+        out = self.fusion_out[0](torch.cat([out, f_E], dim=1))
+        skip = self.fusion_skip[0](torch.cat([skip, f_E], dim=1))
+        noise = (
+            x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
+            .normal_()
+            .detach()
+            * 0.0
+        )
+        out = self.stylegan().convs[6](out, adastyles[:, 7], noise=noise)
+        out = self.stylegan().convs[7](out, adastyles[:, 8], noise=noise)
+        skip = self.stylegan().to_rgbs[3](out, adastyles[:, 9], skip)
 
-            batch, _, height, width = out.shape
-            noise = (
-                x.new_empty(batch, 1, height * 2, width * 2).normal_().detach() * 0.0
-            )
+        f_E = encoder_features[1]
+        out = self.fusion_out[1](torch.cat([out, f_E], dim=1))
+        skip = self.fusion_skip[1](torch.cat([skip, f_E], dim=1))
+        noise = (
+            x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
+            .normal_()
+            .detach()
+            * 0.0
+        )
+        out = self.stylegan().convs[8](out, adastyles[:, 9], noise=noise)
+        out = self.stylegan().convs[9](out, adastyles[:, 10], noise=noise)
+        skip = self.stylegan().to_rgbs[4](out, adastyles[:, 11], skip)
 
-            code = adastyles
+        f_E = encoder_features[2]
+        out = self.fusion_out[2](torch.cat([out, f_E], dim=1))
+        skip = self.fusion_skip[2](torch.cat([skip, f_E], dim=1))
+        noise = (
+            x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
+            .normal_()
+            .detach()
+            * 0.0
+        )
+        out = self.stylegan().convs[10](out, adastyles[:, 11], noise=noise)
+        out = self.stylegan().convs[11](out, adastyles[:, 12], noise=noise)
+        skip = self.stylegan().to_rgbs[5](out, adastyles[:, 13], skip)
 
-            out = conv1(out, code[:, _index + 6], noise=noise)
-            out = conv2(out, code[:, _index + 7], noise=noise)
-            skip = to_rgb(out, code[:, _index + 8], skip)
+        f_E = encoder_features[3]
+        out = self.fusion_out[3](torch.cat([out, f_E], dim=1))
+        skip = self.fusion_skip[3](torch.cat([skip, f_E], dim=1))
+        noise = (
+            x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
+            .normal_()
+            .detach()
+            * 0.0
+        )
+        out = self.stylegan().convs[12](out, adastyles[:, 13], noise=noise)
+        out = self.stylegan().convs[13](out, adastyles[:, 14], noise=noise)
+        skip = self.stylegan().to_rgbs[6](out, adastyles[:, 15], skip)
 
-            _index += 2
+        noise = (
+            x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
+            .normal_()
+            .detach()
+            * 0.0
+        )
+        out = self.stylegan().convs[14](out, adastyles[:, 15], noise=noise)
+        out = self.stylegan().convs[15](out, adastyles[:, 16], noise=noise)
+        skip = self.stylegan().to_rgbs[7](out, adastyles[:, 17], skip)
 
         image = skip
 
