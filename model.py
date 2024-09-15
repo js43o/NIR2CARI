@@ -2,8 +2,6 @@ from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
 from models.pix2pixHD.util import util
 
 from models.VToonify.model.vtoonify import VToonify
-from models.VToonify.model.bisenet.model import BiSeNet
-from models.VToonify.model.encoder.align_all_parallel import align_face
 from models.VToonify.util import *
 
 from models.CycleGAN.models import *
@@ -12,8 +10,6 @@ from models.CycleGAN.inference import *
 
 import numpy as np
 import torch
-import torch.nn.functional as F
-import dlib
 import time
 
 
@@ -41,22 +37,6 @@ class NIR2CARI(nn.Module):
         )
         self.vtoonify.to(self.device)
 
-        self.parsingpredictor = BiSeNet(n_classes=19)
-        self.parsingpredictor.load_state_dict(
-            torch.load(
-                "models/VToonify/checkpoints/faceparsing.pth",
-                map_location=lambda storage, loc: storage,
-            )
-        )
-        self.parsingpredictor.to(self.device).eval()
-
-        self.landmarkpredictor = dlib.shape_predictor(
-            "models/VToonify/checkpoints/shape_predictor_68_face_landmarks.dat"
-        )
-        self.pspencoder = load_psp_standalone(
-            "models/VToonify/checkpoints/encoder.pt", self.device
-        )
-
         # cyclegan
         self.cyclegan = GeneratorResNet((3, 1024, 1024), 9)
         if self.device == "cuda":
@@ -78,44 +58,9 @@ class NIR2CARI(nn.Module):
 
         # vtoonify
         time_s = time.time()
-        paras = get_video_crop_parameter(colorized, self.landmarkpredictor)
-        if paras is not None:
-            scale = 1
-            kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
-
-            h, w, top, bottom, left, right, scale = paras
-            H, W = int(bottom - top), int(right - left)
-
-            if scale <= 0.75:
-                colorized = cv2.sepFilter2D(colorized, -1, kernel_1d, kernel_1d)
-            if scale <= 0.375:
-                colorized = cv2.sepFilter2D(colorized, -1, kernel_1d, kernel_1d)
-            colorized = cv2.resize(colorized, (w, h))[top:bottom, left:right]
-
-        with torch.no_grad():
-            I = align_face(colorized, self.landmarkpredictor)
-            I = transform(I).unsqueeze(dim=0).to(self.device)
-            s_w = self.pspencoder(I)
-            s_w = self.vtoonify.zplus2wplus(s_w)
-
-            x = transform(colorized).unsqueeze(dim=0).to(self.device)
-            x_p = F.interpolate(
-                self.parsingpredictor(
-                    F.interpolate(
-                        x, scale_factor=2, mode="bilinear", align_corners=False
-                    )
-                    * 2
-                )[0],
-                scale_factor=0.5,
-                recompute_scale_factor=False,
-            ).detach()
-
-            inputs = torch.cat((x, x_p / 16.0), dim=1)
-            y_tilde = self.vtoonify(
-                inputs,
-                s_w.repeat(inputs.size(0), 1, 1),
-            )
-            y_tilde = torch.clamp(y_tilde, -1, 1)
+        y_tilde = self.vtoonify(colorized)
+        y_tilde = torch.clamp(y_tilde, -1, 1)
+        print(time.time() - time_s)
 
         caricatured = cv2.cvtColor(
             (
@@ -123,7 +68,6 @@ class NIR2CARI(nn.Module):
             ).astype(np.uint8),
             cv2.COLOR_RGB2BGR,
         )
-        print(time.time() - time_s)
         # cv2.imwrite(
         #     "%s/%s_caricatured.png" % (self.opt["output"], data["filename"]),
         #     caricatured,

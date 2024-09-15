@@ -24,20 +24,12 @@ def load_psp_standalone(checkpoint_path, device="cuda"):
     psp.load_state_dict(psp_dict)
     psp.eval()
     psp = psp.to(device)
-    latent_avg = ckpt["latent_avg"].to(device)
 
-    def add_latent_avg(model, inputs, outputs):
-        return outputs + latent_avg.repeat(outputs.shape[0], 1, 1)
-
-    psp.register_forward_hook(add_latent_avg)
     return psp
 
 
 def get_video_crop_parameter(filepath, predictor, padding=[200, 200, 200, 200]):
-    if type(filepath) == str:
-        img = dlib.load_rgb_image(filepath)
-    else:
-        img = filepath
+    img = filepath
     lm = get_landmark(img, predictor)
     if lm is None:
         return None
