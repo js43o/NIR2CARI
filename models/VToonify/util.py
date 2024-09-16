@@ -1,11 +1,9 @@
-import numpy as np
-import dlib
+import cv2
 import math
 import argparse
 import torch
 
 from .model.encoder.encoders.psp_encoders import GradualStyleEncoder
-from .model.encoder.align_all_parallel import get_landmark
 
 
 def load_psp_standalone(checkpoint_path, device="cuda"):
@@ -28,28 +26,27 @@ def load_psp_standalone(checkpoint_path, device="cuda"):
     return psp
 
 
-def get_video_crop_parameter(filepath, predictor, padding=[200, 200, 200, 200]):
-    img = filepath
-    lm = get_landmark(img, predictor)
-    if lm is None:
-        return None
-    lm_chin = lm[0:17]  # left-right
-    lm_eyebrow_left = lm[17:22]  # left-right
-    lm_eyebrow_right = lm[22:27]  # left-right
-    lm_nose = lm[27:31]  # top-down
-    lm_nostrils = lm[31:36]  # top-down
-    lm_eye_left = lm[36:42]  # left-clockwise
-    lm_eye_right = lm[42:48]  # left-clockwise
-    lm_mouth_outer = lm[48:60]  # left-clockwise
-    lm_mouth_inner = lm[60:68]  # left-clockwise
+def resize_and_pad(img, size):
+    h, w, c = img.shape
 
-    scale = 64.0 / (np.mean(lm_eye_right[:, 0]) - np.mean(lm_eye_left[:, 0]))
-    center = (
-        (np.mean(lm_eye_right, axis=0) + np.mean(lm_eye_left, axis=0)) / 2
-    ) * scale
-    h, w = round(img.shape[0] * scale), round(img.shape[1] * scale)
-    left = max(round(center[0] - padding[0]), 0) // 8 * 8
-    right = min(round(center[0] + padding[1]), w) // 8 * 8
-    top = max(round(center[1] - padding[2]), 0) // 8 * 8
-    bottom = min(round(center[1] + padding[3]), h) // 8 * 8
-    return h, w, top, bottom, left, right, scale
+    if h > w:
+        w = int(w * (size / h))
+        h = size
+    else:
+        h = int(h * (size / w))
+        w = size
+
+    py = (size - h) // 2
+    px = (size - w) // 2
+
+    img = cv2.resize(img, (w, h), interpolation=cv2.INTER_LANCZOS4)
+    img = cv2.copyMakeBorder(
+        img,
+        py,
+        py + (size - (h + py * 2)),
+        px,
+        px + (size - (w + px * 2)),
+        cv2.BORDER_REPLICATE,
+    )
+
+    return img

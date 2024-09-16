@@ -58,6 +58,7 @@ class NIR2CARI(nn.Module):
 
         # vtoonify
         time_s = time.time()
+
         y_tilde = self.vtoonify(colorized)
         y_tilde = torch.clamp(y_tilde, -1, 1)
         print(time.time() - time_s)

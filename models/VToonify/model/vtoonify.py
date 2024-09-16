@@ -1,13 +1,9 @@
 import torch
-import numpy as np
 import math
-import cv2
 from torch import nn
 import torch.nn.functional as F
-import torchvision.transforms as transforms
 
 from .bisenet.model import BiSeNet
-from .encoder.align_all_parallel import align_face
 from .stylegan.model import Generator
 from ..util import *
 
@@ -41,13 +37,6 @@ class VToonify(nn.Module):
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.transform = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-            ]
-        )
-
         # preprocessing models
         self.parsingpredictor = BiSeNet(n_classes=19)
         self.parsingpredictor.load_state_dict(
@@ -57,9 +46,6 @@ class VToonify(nn.Module):
             )
         )
         self.parsingpredictor.to(self.device).eval()
-        self.landmarkpredictor = dlib.shape_predictor(
-            "models/VToonify/checkpoints/shape_predictor_68_face_landmarks.dat"
-        )
         self.pspencoder = load_psp_standalone(
             "models/VToonify/checkpoints/encoder.pt", self.device
         )
@@ -125,31 +111,20 @@ class VToonify(nn.Module):
         )
 
     def forward(self, x):
-        paras = get_video_crop_parameter(x, self.landmarkpredictor)
-        if paras is not None:
-            scale = 1
-            kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
-
-            h, w, top, bottom, left, right, scale = paras
-            H, W = int(bottom - top), int(right - left)
-
-            if scale <= 0.75:
-                x = cv2.sepFilter2D(x, -1, kernel_1d, kernel_1d)
-            if scale <= 0.375:
-                x = cv2.sepFilter2D(x, -1, kernel_1d, kernel_1d)
-            x = cv2.resize(x, (w, h))[top:bottom, left:right]
+        x = resize_and_pad(x, 256)
 
         with torch.no_grad():
-            I = align_face(x, self.landmarkpredictor)
-            I = self.transform(I).unsqueeze(dim=0).to(self.device)
+            I = torch.tensor(x).permute(2, 0, 1) / 255.0
+            I = ((I - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
             s_w = self.pspencoder(I)
             s_w = self.zplus2wplus(s_w)
 
-            x = self.transform(x).unsqueeze(dim=0).to(self.device)
+            x = torch.tensor(x).permute(2, 0, 1) / 255.0
+            x = ((x - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
             x_p = F.interpolate(
                 self.parsingpredictor(
                     F.interpolate(
-                        x, scale_factor=2, mode="bilinear", align_corners=False
+                        x, scale_factor=2.0, mode="bilinear", align_corners=False
                     )
                     * 2
                 )[0],
@@ -160,9 +135,7 @@ class VToonify(nn.Module):
             feat = torch.cat((x, x_p / 16.0), dim=1)
             styles = s_w.repeat(feat.size(0), 1, 1)
 
-        ###
         encoder_features = []
-
         # encode
         feat = self.encoder[0](feat)
         encoder_features.append(feat)
