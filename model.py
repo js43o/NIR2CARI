@@ -27,7 +27,6 @@ class NIR2CARI(nn.Module):
         # pix2pixHD
         self.pix2pixHD = Pix2PixHDModel(self.opt)
 
-        """
         # vtoonify
         self.vtoonify = VToonify()
         self.vtoonify.load_state_dict(
@@ -38,12 +37,13 @@ class NIR2CARI(nn.Module):
             strict=False,
         )
         self.vtoonify.to(self.device)
-        """
 
         # pSp
+        """
         self.pSp = pSp()
         self.pSp.eval()
         self.pSp.cuda()
+        """
 
         # cyclegan
         self.cyclegan = GeneratorResNet((3, 1024, 1024), 9)
@@ -58,19 +58,17 @@ class NIR2CARI(nn.Module):
     def forward(self, data):
         # pix2pixHD
         colorized = self.pix2pixHD(data["label"])
-        # colorized = util.tensor2im(colorized.data[0])
+        colorized = util.tensor2im(colorized.data[0])
         # cv2.imwrite(
         #     "%s/%s_colorized.png" % (self.opt["output"], data["filename"]),
         #     colorized[..., ::-1],
         # )
 
         # vtoonify
-        """
         time_s = time.time()
         y_tilde = self.vtoonify(colorized)
         y_tilde = torch.clamp(y_tilde, -1, 1)
         print(time.time() - time_s)
-
         caricatured = cv2.cvtColor(
             (
                 (y_tilde[0].detach().cpu().numpy().transpose(1, 2, 0) + 1.0) * 127.5
@@ -81,8 +79,8 @@ class NIR2CARI(nn.Module):
         #     "%s/%s_caricatured.png" % (self.opt["output"], data["filename"]),
         #     caricatured,
         # )
-        """
 
+        """
         # pixel2style2pixel
         colorized = resize_and_pad(colorized.data[0], 256).unsqueeze(0)
         caricatured = self.pSp(colorized)[0]
@@ -93,6 +91,7 @@ class NIR2CARI(nn.Module):
             ).astype(np.uint8),
             cv2.COLOR_RGB2BGR,
         )
+        """
 
         # cyclegan
         synthesized = sample_images(caricatured, self.cyclegan)

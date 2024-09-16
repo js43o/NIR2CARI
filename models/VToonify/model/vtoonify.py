@@ -27,14 +27,6 @@ class VToonify(nn.Module):
     def __init__(self):
         super().__init__()
 
-        # self.in_size = 256
-        self.out_size = 1024
-        self.img_channels = 3
-        self.style_channels = 512
-        self.num_mlps = 8
-        self.channel_multiplier = 2
-        # self.num_res_layers = 6
-
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # preprocessing models
@@ -57,7 +49,7 @@ class VToonify(nn.Module):
         self.encoder = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.Conv2d(self.img_channels + 19, 32, 3, 1, 1, bias=True),
+                    nn.Conv2d(3 + 19, 32, 3, 1, 1, bias=True),
                     nn.LeakyReLU(negative_slope=0.2, inplace=True),
                     nn.Conv2d(32, 128, 3, 1, 1, bias=True),
                     nn.LeakyReLU(negative_slope=0.2, inplace=True),
@@ -88,7 +80,7 @@ class VToonify(nn.Module):
                     VToonifyResBlock(512),
                     VToonifyResBlock(512),
                 ),
-                nn.Conv2d(512, self.img_channels, 1, 1, 0, bias=True),
+                nn.Conv2d(512, 3, 1, 1, 0, bias=True),
             ]
         )
 
