@@ -70,7 +70,9 @@ class FusedLeakyReLUFunction(Function):
         if bias is None:
             bias = empty
 
-        out = fused.fused_bias_act(input, bias, empty, 3, 0, negative_slope, scale)
+        out = fused.fused_bias_act(
+            input, bias.to("cuda"), empty, 3, 0, negative_slope, scale
+        )
         ctx.save_for_backward(out)
         ctx.negative_slope = negative_slope
         ctx.scale = scale

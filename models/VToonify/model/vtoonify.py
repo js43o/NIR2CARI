@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from .bisenet.model import BiSeNet
 from .stylegan.model import Generator
-from ..util import *
+from ..util import load_psp_standalone, resize_and_pad
 
 
 class VToonifyResBlock(nn.Module):
@@ -111,15 +111,16 @@ class VToonify(nn.Module):
         )
 
     def forward(self, x):
+        x = torch.tensor(x).permute(2, 0, 1) / 255.0
         x = resize_and_pad(x, 256)
 
         with torch.no_grad():
-            I = torch.tensor(x).permute(2, 0, 1) / 255.0
+            I = x.clone().detach()
             I = ((I - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
+
             s_w = self.pspencoder(I)
             s_w = self.zplus2wplus(s_w)
 
-            x = torch.tensor(x).permute(2, 0, 1) / 255.0
             x = ((x - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
             x_p = F.interpolate(
                 self.parsingpredictor(
@@ -135,25 +136,18 @@ class VToonify(nn.Module):
             feat = torch.cat((x, x_p / 16.0), dim=1)
             styles = s_w.repeat(feat.size(0), 1, 1)
 
-        encoder_features = []
         # encode
-        feat = self.encoder[0](feat)
-        encoder_features.append(feat)
-        feat = self.encoder[1](feat)
-        encoder_features.append(feat)
-        feat = self.encoder[2](feat)
-        encoder_features.append(feat)
-        feat = self.encoder[3](feat)
-        encoder_features.append(feat)
-        feat = self.encoder[4](feat)
+        feat_0 = self.encoder[0](feat)
+        feat_1 = self.encoder[1](feat_0)
+        feat_2 = self.encoder[2](feat_1)
+        feat_3 = self.encoder[3](feat_2)
+        feat_4 = self.encoder[4](feat_3)
 
-        encoder_features = encoder_features[::-1]
-
-        out = feat
-        skip = self.encoder[5](feat)
+        out = feat_4
+        skip = self.encoder[5](feat_4)
 
         # decode
-        f_E = encoder_features[0]
+        f_E = feat_3
         out = self.fusion_out[0](torch.cat([out, f_E], dim=1))
         skip = self.fusion_skip[0](torch.cat([skip, f_E], dim=1))
         noise = (
@@ -167,7 +161,7 @@ class VToonify(nn.Module):
         out = self.generator.convs[7](out, styles[:, 8], noise=noise)
         skip = self.generator.to_rgbs[3](out, styles[:, 9], skip)
 
-        f_E = encoder_features[1]
+        f_E = feat_2
         out = self.fusion_out[1](torch.cat([out, f_E], dim=1))
         skip = self.fusion_skip[1](torch.cat([skip, f_E], dim=1))
         noise = (
@@ -180,7 +174,7 @@ class VToonify(nn.Module):
         out = self.generator.convs[9](out, styles[:, 10], noise=noise)
         skip = self.generator.to_rgbs[4](out, styles[:, 11], skip)
 
-        f_E = encoder_features[2]
+        f_E = feat_1
         out = self.fusion_out[2](torch.cat([out, f_E], dim=1))
         skip = self.fusion_skip[2](torch.cat([skip, f_E], dim=1))
         noise = (
@@ -193,7 +187,7 @@ class VToonify(nn.Module):
         out = self.generator.convs[11](out, styles[:, 12], noise=noise)
         skip = self.generator.to_rgbs[5](out, styles[:, 13], skip)
 
-        f_E = encoder_features[3]
+        f_E = feat_0
         out = self.fusion_out[3](torch.cat([out, f_E], dim=1))
         skip = self.fusion_skip[3](torch.cat([skip, f_E], dim=1))
         noise = (

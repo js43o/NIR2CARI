@@ -2,7 +2,6 @@ from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
 from models.pix2pixHD.util import util
 
 from models.VToonify.model.vtoonify import VToonify
-from models.VToonify.util import *
 
 from models.CycleGAN.models import *
 from models.CycleGAN.luminance import *

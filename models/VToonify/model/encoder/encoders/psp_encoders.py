@@ -35,7 +35,7 @@ class GradualStyleBlock(Module):
 
 
 class GradualStyleEncoder(Module):
-    def __init__(self, num_layers, mode="ir", opts=None):
+    def __init__(self, opts=None):
         super(GradualStyleEncoder, self).__init__()
 
         self.body_modules = [
@@ -106,7 +106,7 @@ class GradualStyleEncoder(Module):
         _, _, H, W = y.size()
         return F.interpolate(x, size=(H, W), mode="bilinear", align_corners=True) + y
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         x = self.input_layer(x)
 
         latents = []
@@ -134,18 +134,6 @@ class GradualStyleEncoder(Module):
                 if idx == self.middle_ind:
                     p1 = self._upsample_add(p2, self.latlayer2(c1))
                 latents.append(layer(p1))
-
-        """ 
-        for j in range(self.coarse_ind):
-            latents.append(self.styles[j](c3))
-
-        p2 = self._upsample_add(c3, self.latlayer1(c2))
-        for j in range(self.coarse_ind, self.middle_ind):
-            latents.append(self.styles[j](p2))
-
-        p1 = self._upsample_add(p2, self.latlayer2(c1))
-        for j in range(self.middle_ind, self.style_count):
-            latents.append(self.styles[j](p1)) """
 
         out = torch.stack(latents, dim=1)
         return out
