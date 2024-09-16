@@ -1,0 +1,7 @@
+pretrained_models/*
+experiments/*
+data/*
+exp*/
+temp*
+wandb*
+*.pyc
