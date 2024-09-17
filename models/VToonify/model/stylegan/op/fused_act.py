@@ -116,4 +116,7 @@ def fused_leaky_relu(
     negative_slope: float = 0.2,
     scale: float = 2**0.5,
 ):
-    return FusedLeakyReLUFunction.apply(input.contiguous(), bias, negative_slope, scale)
+    if input.dim() == 4:
+        bias = bias.unsqueeze(1).unsqueeze(2)
+    return scale * F.leaky_relu((input + bias), negative_slope)
+    # return FusedLeakyReLUFunction.apply(input.contiguous(), bias, negative_slope, scale)

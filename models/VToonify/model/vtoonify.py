@@ -149,7 +149,8 @@ class VToonify(nn.Module):
             * 0.0
         )
 
-        out = self.generator.convs[6](out, styles[:, 7], noise=noise)
+        out = self.generator.convs[6](out, styles[:, 7])
+
         out = self.generator.convs[7](out, styles[:, 8], noise=noise)
         skip = self.generator.to_rgbs[3](out, styles[:, 9], skip)
 

@@ -35,7 +35,7 @@ class GradualStyleBlock(Module):
 
 
 class GradualStyleEncoder(Module):
-    def __init__(self, opts=None):
+    def __init__(self):
         super(GradualStyleEncoder, self).__init__()
 
         self.body_modules = [
@@ -66,14 +66,14 @@ class GradualStyleEncoder(Module):
         ]
 
         self.input_layer = Sequential(
-            Conv2d(opts.input_nc, 64, (3, 3), 1, 1, bias=False),
+            Conv2d(3, 64, (3, 3), 1, 1, bias=False),
             BatchNorm2d(64),
             PReLU(64),
         )
         self.body = Sequential(*self.body_modules)
 
         self.styles = nn.ModuleList()
-        self.style_count = opts.n_styles
+        self.style_count = 18
         self.coarse_ind = 3
         self.middle_ind = 7
         for i in range(self.style_count):

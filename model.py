@@ -2,7 +2,6 @@ from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
 from models.pix2pixHD.util import util
 
 from models.VToonify.model.vtoonify import VToonify
-from models.pixel2style2pixel.models.psp import pSp
 
 from models.CycleGAN.models import *
 from models.CycleGAN.luminance import *
@@ -69,6 +68,7 @@ class NIR2CARI(nn.Module):
         y_tilde = self.vtoonify(colorized)
         y_tilde = torch.clamp(y_tilde, -1, 1)
         print(time.time() - time_s)
+
         caricatured = cv2.cvtColor(
             (
                 (y_tilde[0].detach().cpu().numpy().transpose(1, 2, 0) + 1.0) * 127.5

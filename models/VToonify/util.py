@@ -7,26 +7,21 @@ from .model.encoder.encoders.psp_encoders import GradualStyleEncoder
 
 
 def load_psp_standalone(checkpoint_path, device="cuda"):
+    psp = GradualStyleEncoder()
     ckpt = torch.load(checkpoint_path, map_location="cpu")
-    opts = ckpt["opts"]
-    if "output_size" not in opts:
-        opts["output_size"] = 1024
-    opts["n_styles"] = int(math.log(opts["output_size"], 2)) * 2 - 2
-    opts = argparse.Namespace(**opts)
-    psp = GradualStyleEncoder(opts)
     psp_dict = {
         k.replace("encoder.", ""): v
         for k, v in ckpt["state_dict"].items()
         if k.startswith("encoder.")
     }
+
     psp.load_state_dict(psp_dict)
-    psp.eval()
-    psp = psp.to(device)
+    psp.eval().to(device)
 
     return psp
 
 
-def resize_and_pad(img, size: int):
+def resize_and_pad(img: torch.Tensor, size: int):
     c, h, w = img.shape
 
     if h > w:

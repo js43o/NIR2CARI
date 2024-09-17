@@ -146,8 +146,19 @@ class UpFirDn2d(Function):
 
 
 def upfirdn2d(input, kernel, up: int = 1, down: int = 1, pad: Tuple[int, int] = (0, 0)):
-    out = UpFirDn2d.apply(
-        input, kernel, (up, up), (down, down), (pad[0], pad[1], pad[0], pad[1])
-    )
+    out = F.interpolate(input, scale_factor=up)
+    out = F.pad(out, (*pad, *pad))
+    out_channels = []
 
+    for channel in out.squeeze(0):
+        out_c = F.conv2d(
+            channel.unsqueeze(0).unsqueeze(1), kernel.unsqueeze(0).unsqueeze(1)
+        )
+        out_channels.append(out_c)
+
+    out = torch.cat(out_channels, dim=1)
+
+    # out = UpFirDn2d.apply(
+    #     input, kernel, (up, up), (down, down), (pad[0], pad[1], pad[0], pad[1])
+    # )
     return out

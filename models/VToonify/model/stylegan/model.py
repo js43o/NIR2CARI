@@ -2,6 +2,8 @@ import math
 import torch
 from torch import nn
 from torch.nn import functional as F
+from typing import Optional
+import cv2
 
 from .op import (
     FusedLeakyReLU,
@@ -177,15 +179,14 @@ class EqualLinear(nn.Module):
 class ModulatedConv2d(nn.Module):
     def __init__(
         self,
-        in_channel,
-        out_channel,
-        kernel_size,
-        style_dim,
-        demodulate=True,
-        upsample=False,
-        downsample=False,
-        blur_kernel=[1, 3, 3, 1],
-        fused=True,
+        in_channel: int,
+        out_channel: int,
+        kernel_size: int,
+        style_dim: int,
+        demodulate: bool = True,
+        upsample: bool = False,
+        downsample: bool = False,
+        fused: bool = True,
     ):
         super().__init__()
 
@@ -195,6 +196,8 @@ class ModulatedConv2d(nn.Module):
         self.out_channel = out_channel
         self.upsample = upsample
         self.downsample = downsample
+
+        blur_kernel = [1, 3, 3, 1]
 
         factor = 2
         p = (len(blur_kernel) - factor) - (kernel_size - 1)
@@ -221,7 +224,8 @@ class ModulatedConv2d(nn.Module):
             f"upsample={self.upsample}, downsample={self.downsample})"
         )
 
-    def forward(self, input, style, externalweight=None):
+    def forward(self, input, style):
+
         batch, in_channel, height, width = input.shape
 
         style = self.modulation(style).view(batch, 1, in_channel, 1, 1)
@@ -262,11 +266,10 @@ class NoiseInjection(nn.Module):
 
         self.weight = nn.Parameter(torch.zeros(1))
 
-    def forward(self, image, noise=None):
+    def forward(self, image, noise: Optional[torch.Tensor] = None):
         if noise is None:
             batch, _, height, width = image.shape
             noise = image.new_empty(batch, 1, height, width).normal_()
-
         return image + self.weight * noise
 
 
@@ -286,13 +289,12 @@ class ConstantInput(nn.Module):
 class StyledConv(nn.Module):
     def __init__(
         self,
-        in_channel,
-        out_channel,
-        kernel_size,
-        style_dim,
-        upsample=False,
-        blur_kernel=[1, 3, 3, 1],
-        demodulate=True,
+        in_channel: int,
+        out_channel: int,
+        kernel_size: int,
+        style_dim: int,
+        upsample: bool = False,
+        demodulate: bool = True,
     ):
         super().__init__()
 
@@ -302,7 +304,6 @@ class StyledConv(nn.Module):
             kernel_size,
             style_dim,
             upsample=upsample,
-            blur_kernel=blur_kernel,
             demodulate=demodulate,
         )
 
@@ -311,8 +312,8 @@ class StyledConv(nn.Module):
         # self.activate = ScaledLeakyReLU(0.2)
         self.activate = FusedLeakyReLU(out_channel)
 
-    def forward(self, input, style, noise=None, externalweight=None):
-        out = self.conv(input, style, externalweight)
+    def forward(self, input, style, noise: Optional[torch.Tensor] = None):
+        out = self.conv(input, style)
         out = self.noise(out, noise=noise)
         # out = out + self.bias
         out = self.activate(out)
@@ -321,273 +322,110 @@ class StyledConv(nn.Module):
 
 
 class ToRGB(nn.Module):
-    def __init__(self, in_channel, style_dim, upsample=True, blur_kernel=[1, 3, 3, 1]):
+    def __init__(self, in_channel, style_dim):
         super().__init__()
 
-        self.upsample = Upsample(blur_kernel)
+        self.upsample = Upsample([1, 3, 3, 1])
         self.conv = ModulatedConv2d(in_channel, 3, 1, style_dim, demodulate=False)
         self.bias = nn.Parameter(torch.zeros(1, 3, 1, 1))
 
-    def forward(self, input, style, skip=None, externalweight=None):
-        out = self.conv(input, style, externalweight)
+    def forward(self, input, style, skip: Optional[torch.Tensor] = None):
+        out = self.conv(input, style)
         out = out + self.bias
 
         if skip is not None:
             skip = self.upsample(skip)
-
             out = out + skip
 
         return out
 
 
 class Generator(nn.Module):
-    def __init__(
-        self,
-    ):
+    def __init__(self):
         super().__init__()
 
-        self.size = 1024
-        self.style_dim = 512
-        self.channel_multiplier = 2
-
-        self.blur_kernel = [1, 3, 3, 1]
-        self.lr_mlp = 0.01
-
-        layers = [
+        self.style = nn.Sequential(
             PixelNorm(),
-            # 8 Equal Linear
             EqualLinear(
-                self.style_dim,
-                self.style_dim,
-                lr_mul=self.lr_mlp,
+                512,
+                512,
+                lr_mul=0.01,
                 activation="fused_lrelu",
             ),
             EqualLinear(
-                self.style_dim,
-                self.style_dim,
-                lr_mul=self.lr_mlp,
+                512,
+                512,
+                lr_mul=0.01,
                 activation="fused_lrelu",
             ),
             EqualLinear(
-                self.style_dim,
-                self.style_dim,
-                lr_mul=self.lr_mlp,
+                512,
+                512,
+                lr_mul=0.01,
                 activation="fused_lrelu",
             ),
             EqualLinear(
-                self.style_dim,
-                self.style_dim,
-                lr_mul=self.lr_mlp,
+                512,
+                512,
+                lr_mul=0.01,
                 activation="fused_lrelu",
             ),
             EqualLinear(
-                self.style_dim,
-                self.style_dim,
-                lr_mul=self.lr_mlp,
+                512,
+                512,
+                lr_mul=0.01,
                 activation="fused_lrelu",
             ),
             EqualLinear(
-                self.style_dim,
-                self.style_dim,
-                lr_mul=self.lr_mlp,
+                512,
+                512,
+                lr_mul=0.01,
                 activation="fused_lrelu",
             ),
             EqualLinear(
-                self.style_dim,
-                self.style_dim,
-                lr_mul=self.lr_mlp,
+                512,
+                512,
+                lr_mul=0.01,
                 activation="fused_lrelu",
             ),
             EqualLinear(
-                self.style_dim,
-                self.style_dim,
-                lr_mul=self.lr_mlp,
+                512,
+                512,
+                lr_mul=0.01,
                 activation="fused_lrelu",
             ),
-        ]
-
-        self.style = nn.Sequential(*layers)
-
-        self.channels = {
-            4: 512,
-            8: 512,
-            16: 512,
-            32: 512,
-            64: 256 * self.channel_multiplier,
-            128: 128 * self.channel_multiplier,
-            256: 64 * self.channel_multiplier,
-            512: 32 * self.channel_multiplier,
-            1024: 16 * self.channel_multiplier,
-        }
-
-        self.input = ConstantInput(self.channels[4])
-        self.conv1 = StyledConv(
-            self.channels[4],
-            self.channels[4],
-            3,
-            self.style_dim,
-            blur_kernel=self.blur_kernel,
         )
-        self.to_rgb1 = ToRGB(self.channels[4], self.style_dim, upsample=False)
-
-        self.log_size = 10
-        self.num_layers = 17
-
-        self.noises = nn.Module()
-        self.noises.register_buffer("noise_0", torch.randn(1, 1, 4, 4))
-        self.noises.register_buffer("noise_1", torch.randn(1, 1, 8, 8))
-        self.noises.register_buffer("noise_2", torch.randn(1, 1, 8, 8))
-        self.noises.register_buffer("noise_3", torch.randn(1, 1, 16, 16))
-        self.noises.register_buffer("noise_4", torch.randn(1, 1, 16, 16))
-        self.noises.register_buffer("noise_5", torch.randn(1, 1, 32, 32))
-        self.noises.register_buffer("noise_6", torch.randn(1, 1, 32, 32))
-        self.noises.register_buffer("noise_7", torch.randn(1, 1, 64, 64))
-        self.noises.register_buffer("noise_8", torch.randn(1, 1, 64, 64))
-        self.noises.register_buffer("noise_9", torch.randn(1, 1, 128, 128))
-        self.noises.register_buffer("noise_10", torch.randn(1, 1, 128, 128))
-        self.noises.register_buffer("noise_11", torch.randn(1, 1, 256, 256))
-        self.noises.register_buffer("noise_12", torch.randn(1, 1, 256, 256))
-        self.noises.register_buffer("noise_13", torch.randn(1, 1, 512, 512))
-        self.noises.register_buffer("noise_14", torch.randn(1, 1, 512, 512))
-        self.noises.register_buffer("noise_15", torch.randn(1, 1, 1024, 1024))
-        self.noises.register_buffer("noise_16", torch.randn(1, 1, 1024, 1024))
 
         self.convs = nn.ModuleList(
             [
-                StyledConv(
-                    512,
-                    512,
-                    3,
-                    self.style_dim,
-                    upsample=True,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    512,
-                    512,
-                    3,
-                    self.style_dim,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    512,
-                    512,
-                    3,
-                    self.style_dim,
-                    upsample=True,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    512,
-                    512,
-                    3,
-                    self.style_dim,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    512,
-                    512,
-                    3,
-                    self.style_dim,
-                    upsample=True,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    512,
-                    512,
-                    3,
-                    self.style_dim,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    512,
-                    512,
-                    3,
-                    self.style_dim,
-                    upsample=True,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    512,
-                    512,
-                    3,
-                    self.style_dim,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    512,
-                    256,
-                    3,
-                    self.style_dim,
-                    upsample=True,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    256,
-                    256,
-                    3,
-                    self.style_dim,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    256,
-                    128,
-                    3,
-                    self.style_dim,
-                    upsample=True,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    128,
-                    128,
-                    3,
-                    self.style_dim,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    128,
-                    64,
-                    3,
-                    self.style_dim,
-                    upsample=True,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    64,
-                    64,
-                    3,
-                    self.style_dim,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    64,
-                    32,
-                    3,
-                    self.style_dim,
-                    upsample=True,
-                    blur_kernel=self.blur_kernel,
-                ),
-                StyledConv(
-                    32,
-                    32,
-                    3,
-                    self.style_dim,
-                    blur_kernel=self.blur_kernel,
-                ),
+                StyledConv(512, 512, 3, 512, upsample=True),
+                StyledConv(512, 512, 3, 512),
+                StyledConv(512, 512, 3, 512, upsample=True),
+                StyledConv(512, 512, 3, 512),
+                StyledConv(512, 512, 3, 512, upsample=True),
+                StyledConv(512, 512, 3, 512),
+                StyledConv(512, 512, 3, 512, upsample=True),
+                StyledConv(512, 512, 3, 512),
+                StyledConv(512, 256, 3, 512, upsample=True),
+                StyledConv(256, 256, 3, 512),
+                StyledConv(256, 128, 3, 512, upsample=True),
+                StyledConv(128, 128, 3, 512),
+                StyledConv(128, 64, 3, 512, upsample=True),
+                StyledConv(64, 64, 3, 512),
+                StyledConv(64, 32, 3, 512, upsample=True),
+                StyledConv(32, 32, 3, 512),
             ]
         )
 
         self.to_rgbs = nn.ModuleList(
             [
-                ToRGB(512, self.style_dim),
-                ToRGB(512, self.style_dim),
-                ToRGB(512, self.style_dim),
-                ToRGB(512, self.style_dim),
-                ToRGB(256, self.style_dim),
-                ToRGB(128, self.style_dim),
-                ToRGB(64, self.style_dim),
-                ToRGB(32, self.style_dim),
+                ToRGB(512, 512),
+                ToRGB(512, 512),
+                ToRGB(512, 512),
+                ToRGB(512, 512),
+                ToRGB(256, 512),
+                ToRGB(128, 512),
+                ToRGB(64, 512),
+                ToRGB(32, 512),
             ]
         )
-
-        self.n_latent = 18
