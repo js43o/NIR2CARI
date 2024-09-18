@@ -23,13 +23,9 @@ def get_keys(d, name):
 class pSp(nn.Module):
     def __init__(self):
         super(pSp, self).__init__()
-        # compute number of style inputs based on the output resolution
-        self.n_styles = 18
-        # Define architecture
         self.encoder = psp_encoders.GradualStyleEncoder()
         self.decoder = Generator()
-        self.face_pool = torch.nn.AdaptiveAvgPool2d((256, 256))
-        # Load weights if needed
+        self.face_pool = torch.nn.AdaptiveAvgPool2d((1024, 1024))
         self.load_weights()
 
     def load_weights(self):
@@ -42,9 +38,7 @@ class pSp(nn.Module):
 
     def forward(self, x):
         codes = self.encoder(x)
-
         images = self.decoder([codes])
-
         images = self.face_pool(images)
 
         return images

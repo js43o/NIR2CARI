@@ -2,6 +2,7 @@ from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
 from models.pix2pixHD.util import util
 
 from models.VToonify.model.vtoonify import VToonify
+from models.pixel2style2pixel.models.psp import pSp
 
 from models.CycleGAN.models import *
 from models.CycleGAN.luminance import *
@@ -24,8 +25,9 @@ class NIR2CARI(nn.Module):
 
     def load_models(self):
         # pix2pixHD
-        self.pix2pixHD = Pix2PixHDModel(self.opt)
+        self.pix2pixHD = Pix2PixHDModel()
 
+        """
         # vtoonify
         self.vtoonify = VToonify()
         self.vtoonify.load_state_dict(
@@ -36,13 +38,12 @@ class NIR2CARI(nn.Module):
             strict=False,
         )
         self.vtoonify.to(self.device)
+        """
 
         # pSp
-        """
         self.pSp = pSp()
         self.pSp.eval()
         self.pSp.cuda()
-        """
 
         # cyclegan
         self.cyclegan = GeneratorResNet((3, 1024, 1024), 9)
@@ -57,14 +58,16 @@ class NIR2CARI(nn.Module):
     def forward(self, data):
         # pix2pixHD
         colorized = self.pix2pixHD(data["label"])
+
+        """
+        # vtoonify
+        time_s = time.time()
         colorized = util.tensor2im(colorized.data[0])
         # cv2.imwrite(
         #     "%s/%s_colorized.png" % (self.opt["output"], data["filename"]),
         #     colorized[..., ::-1],
         # )
-
-        # vtoonify
-        time_s = time.time()
+        
         y_tilde = self.vtoonify(colorized)
         y_tilde = torch.clamp(y_tilde, -1, 1)
         print(time.time() - time_s)
@@ -82,7 +85,7 @@ class NIR2CARI(nn.Module):
 
         """
         # pixel2style2pixel
-        colorized = resize_and_pad(colorized.data[0], 256).unsqueeze(0)
+        colorized = resize_and_pad(colorized, 256)
         caricatured = self.pSp(colorized)[0]
         caricatured = cv2.cvtColor(
             (
@@ -91,7 +94,6 @@ class NIR2CARI(nn.Module):
             ).astype(np.uint8),
             cv2.COLOR_RGB2BGR,
         )
-        """
 
         # cyclegan
         synthesized = sample_images(caricatured, self.cyclegan)
@@ -101,7 +103,7 @@ class NIR2CARI(nn.Module):
 
 
 def resize_and_pad(img, size: int):
-    c, h, w = img.shape
+    b, c, h, w = img.shape
 
     if h > w:
         w = int(w * (size / h))

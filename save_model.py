@@ -1,11 +1,13 @@
 import torch
 
+from model import NIR2CARI
+from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
 from models.VToonify.model.vtoonify import VToonify
+from models.pixel2style2pixel.models.psp import pSp
 
 
 def save():
-    example = torch.rand((3, 256, 256))
-    module = torch.jit.script(VToonify())
+    module = torch.jit.script(pSp())
     module.save("nir2cari.pt")
 
 
@@ -15,3 +17,4 @@ def load():
 
 
 save()
+load()
