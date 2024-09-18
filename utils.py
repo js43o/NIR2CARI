@@ -1,4 +1,5 @@
 import torch
+from torchvision.transforms import functional as F
 
 
 def yiq_from_image(img: torch.Tensor):

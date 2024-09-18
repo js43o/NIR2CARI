@@ -1,21 +1,19 @@
 from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
-from models.pix2pixHD.util import util
+from models.pix2pixHD.util.util import tensor2im
 
 from models.VToonify.model.vtoonify import VToonify
 from models.pixel2style2pixel.models.psp import pSp
 
-from models.CycleGAN.models import *
+from models.CycleGAN.models import GeneratorResNet
 from utils import *
 
-import numpy as np
 import torch
-import cv2
-import time
+import numpy as np
 import torchvision.transforms.functional as F
-from typing import Dict, Union
+from PIL import Image
 
 
-class NIR2CARI(nn.Module):
+class NIR2CARI(torch.nn.Module):
     def __init__(
         self, options={"dataroot": "dataset", "output": "output", "gpu_ids": [0]}
     ):
@@ -28,7 +26,6 @@ class NIR2CARI(nn.Module):
         # pix2pixHD
         self.pix2pixHD = Pix2PixHDModel()
 
-        """
         # vtoonify
         self.vtoonify = VToonify()
         self.vtoonify.load_state_dict(
@@ -39,7 +36,6 @@ class NIR2CARI(nn.Module):
             strict=False,
         )
         self.vtoonify.to(self.device)
-        """
 
         # pSp
         self.pSp = pSp()
@@ -60,42 +56,14 @@ class NIR2CARI(nn.Module):
         # pix2pixHD
         colorized = self.pix2pixHD(image)
 
-        """
         # vtoonify
-        time_s = time.time()
-        colorized = util.tensor2im(colorized.data[0])
-        # cv2.imwrite(
-        #     "%s/%s_colorized.png" % (self.opt["output"], filename),
-        #     colorized[..., ::-1],
-        # )
-        
-        y_tilde = self.vtoonify(colorized)
-        y_tilde = torch.clamp(y_tilde, -1, 1)
-        print(time.time() - time_s)
+        colorized = tensor2im(colorized.data[0])
+        caricatured = self.vtoonify(colorized).squeeze()
 
-        caricatured = cv2.cvtColor(
-            (
-                (y_tilde[0].detach().cpu().numpy().transpose(1, 2, 0) + 1.0) * 127.5
-            ).astype(np.uint8),
-            cv2.COLOR_RGB2BGR,
-        )
-        # cv2.imwrite(
-        #     "%s/%s_caricatured.png" % (self.opt["output"], filename),
-        #     caricatured,
-        # )
-
-        """
         # pixel2style2pixel
+        """
         colorized = resize_and_pad(colorized, 256)
         caricatured = self.pSp(colorized)[0]
-        """
-        caricatured = cv2.cvtColor(
-            (
-                (caricatured.detach().cpu().numpy().squeeze().transpose(1, 2, 0) + 1.0)
-                * 127.5
-            ).astype(np.uint8),
-            cv2.COLOR_RGB2BGR,
-        )
         """
 
         # cyclegan
@@ -108,13 +76,12 @@ class NIR2CARI(nn.Module):
         R, G, B = yiq_to_rgb(stylized, I, Q)
 
         stylized = (
-            torch.stack([R.squeeze(), G.squeeze(), B.squeeze()])
+            torch.stack([B.squeeze(), G.squeeze(), R.squeeze()])
             .permute(1, 2, 0)
             .mul(120)
             .add(120)
             .clip(0, 255)
         )
-        cv2.imwrite(
-            "%s/%s.png" % (self.opt["output"], filename),
-            stylized.detach().cpu().numpy(),
-        )
+
+        result = Image.fromarray(stylized.detach().cpu().numpy().astype(np.uint8))
+        result.save("%s/%s.png" % (self.opt["output"], filename))
