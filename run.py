@@ -31,11 +31,10 @@ if __name__ == "__main__":
     times = []
 
     for i, data in enumerate(dataset):
-        time_s = time.time()
-
-        data["filename"] = os.path.basename(data["path"][0]).split(".")[0]
-        synthesized = nir2cari(data)
-
-        times.append(time.time() - time_s)
+        image = data["label"]
+        filename = os.path.basename(data["path"][0]).split(".")[0]
+        # time_s = time.time()
+        nir2cari(image, filename)
+        # times.append(time.time() - time_s)
 
     # print("avg =", sum(times) / len(times))

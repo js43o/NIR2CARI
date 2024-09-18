@@ -12,8 +12,8 @@ class Pix2PixHDModel(nn.Module):
         save_path = "models/pix2pixHD/checkpoints/latest_net_G.pth"
         self.netG.load_state_dict(torch.load(save_path))
 
-    def forward(self, label):
-        label = label.data.cuda()
-        fake_image = self.netG.forward(label)
+    def forward(self, image):
+        image = image.cuda()
+        fake_image = self.netG.forward(image)
 
         return fake_image

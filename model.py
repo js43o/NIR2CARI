@@ -5,13 +5,14 @@ from models.VToonify.model.vtoonify import VToonify
 from models.pixel2style2pixel.models.psp import pSp
 
 from models.CycleGAN.models import *
-from models.CycleGAN.luminance import *
-from models.CycleGAN.inference import *
+from utils import *
 
 import numpy as np
 import torch
+import cv2
 import time
 import torchvision.transforms.functional as F
+from typing import Dict, Union
 
 
 class NIR2CARI(nn.Module):
@@ -55,16 +56,16 @@ class NIR2CARI(nn.Module):
 
         print("All models are successfully loaded")
 
-    def forward(self, data):
+    def forward(self, image: torch.Tensor, filename: str):
         # pix2pixHD
-        colorized = self.pix2pixHD(data["label"])
+        colorized = self.pix2pixHD(image)
 
         """
         # vtoonify
         time_s = time.time()
         colorized = util.tensor2im(colorized.data[0])
         # cv2.imwrite(
-        #     "%s/%s_colorized.png" % (self.opt["output"], data["filename"]),
+        #     "%s/%s_colorized.png" % (self.opt["output"], filename),
         #     colorized[..., ::-1],
         # )
         
@@ -79,7 +80,7 @@ class NIR2CARI(nn.Module):
             cv2.COLOR_RGB2BGR,
         )
         # cv2.imwrite(
-        #     "%s/%s_caricatured.png" % (self.opt["output"], data["filename"]),
+        #     "%s/%s_caricatured.png" % (self.opt["output"], filename),
         #     caricatured,
         # )
 
@@ -87,6 +88,7 @@ class NIR2CARI(nn.Module):
         # pixel2style2pixel
         colorized = resize_and_pad(colorized, 256)
         caricatured = self.pSp(colorized)[0]
+        """
         caricatured = cv2.cvtColor(
             (
                 (caricatured.detach().cpu().numpy().squeeze().transpose(1, 2, 0) + 1.0)
@@ -94,34 +96,25 @@ class NIR2CARI(nn.Module):
             ).astype(np.uint8),
             cv2.COLOR_RGB2BGR,
         )
+        """
 
         # cyclegan
-        synthesized = sample_images(caricatured, self.cyclegan)
-        cv2.imwrite("%s/%s.png" % (self.opt["output"], data["filename"]), synthesized)
+        Y, I, Q = yiq_from_image(caricatured)
+        luminance = extend_to_three_channel(Y)
+        real = luminance.unsqueeze(dim=0)
 
-        return synthesized
+        stylized = self.cyclegan(real)
+        stylized = F.rgb_to_grayscale(stylized)
+        R, G, B = yiq_to_rgb(stylized, I, Q)
 
-
-def resize_and_pad(img, size: int):
-    b, c, h, w = img.shape
-
-    if h > w:
-        w = int(w * (size / h))
-        h = size
-    else:
-        h = int(h * (size / w))
-        w = size
-
-    py = (size - h) // 2
-    px = (size - w) // 2
-
-    img = F.resize(img, (h, w), antialias=True)
-
-    # img = cv2.resize(img, (w, h), interpolation=cv2.INTER_LANCZOS4)
-    img = F.pad(
-        img,
-        [px, py, px + (size - (w + px * 2)), py + (size - (h + py * 2))],
-        padding_mode="symmetric",
-    )
-
-    return img
+        stylized = (
+            torch.stack([R.squeeze(), G.squeeze(), B.squeeze()])
+            .permute(1, 2, 0)
+            .mul(120)
+            .add(120)
+            .clip(0, 255)
+        )
+        cv2.imwrite(
+            "%s/%s.png" % (self.opt["output"], filename),
+            stylized.detach().cpu().numpy(),
+        )

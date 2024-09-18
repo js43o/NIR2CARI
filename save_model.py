@@ -7,7 +7,7 @@ from models.pixel2style2pixel.models.psp import pSp
 
 
 def save():
-    module = torch.jit.script(pSp())
+    module = torch.jit.script(NIR2CARI())
     module.save("nir2cari.pt")
 
 
