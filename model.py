@@ -1,15 +1,14 @@
 from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
 
-from models.VToonify.model.vtoonify import VToonify
+# from models.VToonify.model.vtoonify import VToonify
+
 from models.pixel2style2pixel.models.psp import pSp
 
 from models.CycleGAN.models import GeneratorResNet
 from utils import *
 
 import torch
-import numpy as np
 import torchvision.transforms.functional as F
-from PIL import Image
 
 
 class NIR2CARI(torch.nn.Module):
@@ -28,6 +27,7 @@ class NIR2CARI(torch.nn.Module):
             torch.load("models/pix2pixHD/checkpoints/latest_net_G.pth")
         )
 
+        """
         # vtoonify
         self.vtoonify = VToonify()
         self.vtoonify.load_state_dict(
@@ -38,6 +38,7 @@ class NIR2CARI(torch.nn.Module):
             strict=False,
         )
         self.vtoonify.to(self.device)
+        """
 
         # pSp
         self.pSp = pSp()

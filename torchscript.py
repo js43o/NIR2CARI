@@ -8,12 +8,11 @@ from model import NIR2CARI
 
 def save():
     model = torch.jit.script(NIR2CARI())
-    model.save("nir2cari.pt")
+    model.save("torchscripts/nir2cari_vtoonify.pt")
 
 
 def load():
-    model = torch.jit.load("nir2cari.pt")
-
+    model = torch.jit.load("torchscripts/nir2cari_vtoonify.pt")
     filename = "Aaron_Eckhart_0001.png"
     image = (
         torch.tensor(cv2.imread("dataset/%s" % filename))
@@ -28,5 +27,4 @@ def load():
     result.save(filename)
 
 
-save()
 load()

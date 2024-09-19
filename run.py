@@ -35,7 +35,7 @@ if __name__ == "__main__":
         image = data["label"]
         filename = os.path.basename(data["path"][0]).split(".")[0]
 
-        result = nir2cari(image, filename)
+        result = nir2cari(image)
 
         result = Image.fromarray(result.detach().cpu().numpy().astype(np.uint8))
         result.save("%s/%s.png" % (options["output"], filename))
