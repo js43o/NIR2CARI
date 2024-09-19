@@ -1,9 +1,11 @@
 from models.pix2pixHD.data.data_loader import CreateDataLoader
 from model import NIR2CARI
 
+import numpy as np
 import os
 import torch
 import argparse
+from PIL import Image
 import time
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -28,13 +30,12 @@ if __name__ == "__main__":
     os.makedirs(options["output"], exist_ok=True)
 
     nir2cari = NIR2CARI(options)
-    times = []
 
     for i, data in enumerate(dataset):
         image = data["label"]
         filename = os.path.basename(data["path"][0]).split(".")[0]
-        # time_s = time.time()
-        nir2cari(image, filename)
-        # times.append(time.time() - time_s)
 
-    # print("avg =", sum(times) / len(times))
+        result = nir2cari(image, filename)
+
+        result = Image.fromarray(result.detach().cpu().numpy().astype(np.uint8))
+        result.save("%s/%s.png" % (options["output"], filename))

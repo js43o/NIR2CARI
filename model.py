@@ -1,5 +1,4 @@
 from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
-from models.pix2pixHD.util.util import tensor2im
 
 from models.VToonify.model.vtoonify import VToonify
 from models.pixel2style2pixel.models.psp import pSp
@@ -25,6 +24,9 @@ class NIR2CARI(torch.nn.Module):
     def load_models(self):
         # pix2pixHD
         self.pix2pixHD = Pix2PixHDModel()
+        self.pix2pixHD.netG.load_state_dict(
+            torch.load("models/pix2pixHD/checkpoints/latest_net_G.pth")
+        )
 
         # vtoonify
         self.vtoonify = VToonify()
@@ -39,32 +41,38 @@ class NIR2CARI(torch.nn.Module):
 
         # pSp
         self.pSp = pSp()
+        pSpCheckpoints = torch.load(
+            "models/pixel2style2pixel/checkpoints/best_model.pt", map_location="cpu"
+        )
+        self.pSp.encoder.load_state_dict(
+            get_keys(pSpCheckpoints, "encoder"), strict=False
+        )
+        self.pSp.decoder.load_state_dict(
+            get_keys(pSpCheckpoints, "decoder"), strict=False
+        )
         self.pSp.eval()
         self.pSp.cuda()
 
         # cyclegan
         self.cyclegan = GeneratorResNet((3, 1024, 1024), 9)
-        if self.device == "cuda":
-            self.cyclegan = self.cyclegan.cuda()
+        self.cyclegan.cuda()
         self.cyclegan.load_state_dict(
             torch.load("models/CycleGAN/checkpoints/generator.pth")
         )
 
         print("All models are successfully loaded")
 
-    def forward(self, image: torch.Tensor, filename: str):
+    def forward(self, image: torch.Tensor):
         # pix2pixHD
         colorized = self.pix2pixHD(image)
 
+        """
         # vtoonify
-        colorized = tensor2im(colorized.data[0])
         caricatured = self.vtoonify(colorized).squeeze()
+        """
 
         # pixel2style2pixel
-        """
-        colorized = resize_and_pad(colorized, 256)
         caricatured = self.pSp(colorized)[0]
-        """
 
         # cyclegan
         Y, I, Q = yiq_from_image(caricatured)
@@ -78,10 +86,9 @@ class NIR2CARI(torch.nn.Module):
         stylized = (
             torch.stack([B.squeeze(), G.squeeze(), R.squeeze()])
             .permute(1, 2, 0)
-            .mul(120)
-            .add(120)
+            .mul(127)
+            .add(127)
             .clip(0, 255)
         )
 
-        result = Image.fromarray(stylized.detach().cpu().numpy().astype(np.uint8))
-        result.save("%s/%s.png" % (self.opt["output"], filename))
+        return stylized

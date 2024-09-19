@@ -5,7 +5,24 @@ import torch.nn.functional as F
 
 from .bisenet.model import BiSeNet
 from .stylegan.model import Generator
-from ..util import load_psp_standalone, resize_and_pad
+from utils import resize_and_pad
+
+from ..model.encoder.encoders.psp_encoders import GradualStyleEncoder
+
+
+def load_psp_standalone(checkpoint_path, device="cuda"):
+    psp = GradualStyleEncoder()
+    ckpt = torch.load(checkpoint_path, map_location="cpu")
+    psp_dict = {
+        k.replace("encoder.", ""): v
+        for k, v in ckpt["state_dict"].items()
+        if k.startswith("encoder.")
+    }
+
+    psp.load_state_dict(psp_dict)
+    psp.eval().to(device)
+
+    return psp
 
 
 class VToonifyResBlock(nn.Module):
@@ -103,8 +120,9 @@ class VToonify(nn.Module):
         )
 
     def forward(self, x):
-        x = torch.tensor(x).permute(2, 0, 1) / 255.0
-        x = resize_and_pad(x, 256)
+        x = x.data[0].permute((1, 2, 0))
+        x = ((x + 1) / 2.0 * 255.0).clip(0, 255).int()
+        x = resize_and_pad(x.permute(2, 0, 1) / 255.0, 256)
 
         with torch.no_grad():
             I = x.clone().detach()

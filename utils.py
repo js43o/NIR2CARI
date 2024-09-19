@@ -32,7 +32,7 @@ def extend_to_three_channel(channel: torch.Tensor):
 
 
 def resize_and_pad(img, size: int):
-    b, c, h, w = img.shape
+    c, h, w = img.squeeze().shape
 
     if h > w:
         w = int(w * (size / h))
@@ -45,8 +45,6 @@ def resize_and_pad(img, size: int):
     px = (size - w) // 2
 
     img = F.resize(img, (h, w), antialias=True)
-
-    # img = cv2.resize(img, (w, h), interpolation=cv2.INTER_LANCZOS4)
     img = F.pad(
         img,
         [px, py, px + (size - (w + px * 2)), py + (size - (h + py * 2))],
@@ -54,3 +52,10 @@ def resize_and_pad(img, size: int):
     )
 
     return img
+
+
+def get_keys(d, name):
+    if "state_dict" in d:
+        d = d["state_dict"]
+    d_filt = {k[len(name) + 1 :]: v for k, v in d.items() if k[: len(name)] == name}
+    return d_filt
