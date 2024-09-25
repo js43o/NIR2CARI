@@ -5,9 +5,17 @@ import torch.nn.functional as F
 
 from .bisenet.model import BiSeNet
 from .stylegan.model import Generator
+from align import align_face, get_video_crop_parameter
 from utils import resize_and_pad
 
 from ..model.encoder.encoders.psp_encoders import GradualStyleEncoder
+
+
+import numpy as np
+import cv2
+import dlib
+from torchvision.transforms.functional import to_pil_image, pil_to_tensor
+from PIL import Image
 
 
 def load_psp_standalone(checkpoint_path, device="cuda"):
@@ -47,6 +55,9 @@ class VToonify(nn.Module):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # preprocessing models
+        self.landmarkpredictor = dlib.shape_predictor(
+            "models/VToonify/checkpoints/shape_predictor_68_face_landmarks.dat"
+        )
         self.parsingpredictor = BiSeNet(n_classes=19)
         self.parsingpredictor.load_state_dict(
             torch.load(
@@ -119,13 +130,35 @@ class VToonify(nn.Module):
             ]
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         x = x.data[0].permute((1, 2, 0))
         x = ((x + 1) / 2.0 * 255.0).clip(0, 255).int()
         x = resize_and_pad(x.permute(2, 0, 1) / 255.0, 256)
 
+        frame = np.array(to_pil_image(x))
+
+        paras = get_video_crop_parameter(frame, self.landmarkpredictor)
+        kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
+
+        if paras is not None:
+            h, w, top, bottom, left, right, scale = paras
+            # for HR image, we apply gaussian blur to it to avoid over-sharp stylization results
+            if scale <= 0.75:
+                frame = cv2.sepFilter2D(frame, -1, kernel_1d, kernel_1d)
+            if scale <= 0.375:
+                frame = cv2.sepFilter2D(frame, -1, kernel_1d, kernel_1d)
+            frame = cv2.resize(frame, (w, h))[top:bottom, left:right]
+
+            x = pil_to_tensor(Image.fromarray(frame))
+
         with torch.no_grad():
-            I = x.clone().detach()
+            x = x.clone().detach()
+            frame = np.array(to_pil_image(x))
+
+            I = align_face(frame, self.landmarkpredictor)
+
+            I = pil_to_tensor(I)
+
             I = ((I - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
 
             s_w = self.pspencoder(I)
