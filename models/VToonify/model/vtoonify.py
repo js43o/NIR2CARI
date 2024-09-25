@@ -14,8 +14,7 @@ from ..model.encoder.encoders.psp_encoders import GradualStyleEncoder
 import numpy as np
 import cv2
 import dlib
-from torchvision.transforms.functional import to_pil_image, pil_to_tensor
-from PIL import Image
+from utils import tensor_to_cv2, cv2_to_tensor
 
 
 def load_psp_standalone(checkpoint_path, device="cuda"):
@@ -135,8 +134,7 @@ class VToonify(nn.Module):
         x = ((x + 1) / 2.0 * 255.0).clip(0, 255).int()
         x = resize_and_pad(x.permute(2, 0, 1) / 255.0, 256)
 
-        frame = np.array(to_pil_image(x))
-
+        frame = tensor_to_cv2(x)
         paras = get_video_crop_parameter(frame, self.landmarkpredictor)
         kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
 
@@ -149,16 +147,9 @@ class VToonify(nn.Module):
                 frame = cv2.sepFilter2D(frame, -1, kernel_1d, kernel_1d)
             frame = cv2.resize(frame, (w, h))[top:bottom, left:right]
 
-            x = pil_to_tensor(Image.fromarray(frame))
-
         with torch.no_grad():
-            x = x.clone().detach()
-            frame = np.array(to_pil_image(x))
-
             I = align_face(frame, self.landmarkpredictor)
-
-            I = pil_to_tensor(I)
-
+            I = cv2_to_tensor(I)
             I = ((I - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
 
             s_w = self.pspencoder(I)

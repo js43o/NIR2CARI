@@ -1,5 +1,9 @@
+import numpy as np
 import torch
 from torchvision.transforms import functional as F
+from PIL import Image
+import cv2
+from typing import Union
 
 
 def yiq_from_image(img: torch.Tensor):
@@ -59,3 +63,36 @@ def get_keys(d, name):
         d = d["state_dict"]
     d_filt = {k[len(name) + 1 :]: v for k, v in d.items() if k[: len(name)] == name}
     return d_filt
+
+
+def cv2_to_tensor(input: cv2.typing.MatLike):
+    image = np.array(input)
+    image[...] = image[..., ::-1]  # BGR to RGB
+    image = pil_to_tensor(image)
+
+    return image
+
+
+def tensor_to_cv2(input: torch.Tensor):
+    if input.device != "cpu":
+        input = input.detach().cpu()
+    image = tensor_to_pil(input)
+    image = np.array(image)
+    image[...] = np.array(image)[..., ::-1]
+
+    return image
+
+
+def pil_to_tensor(input: Union[Image.Image, np.ndarray]):
+    image = torch.tensor(input, dtype=torch.float32)
+    image = image.permute(2, 0, 1) / 255.0
+
+    return image
+
+
+def tensor_to_pil(input: torch.Tensor):
+    image = input.permute(1, 2, 0) * 255.0
+    image = np.array(image, dtype=np.uint8)
+    image = Image.fromarray(image)
+
+    return image
