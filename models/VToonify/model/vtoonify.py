@@ -134,27 +134,28 @@ class VToonify(nn.Module):
         x = ((x + 1) / 2.0 * 255.0).clip(0, 255).int()
         x = resize_and_pad(x.permute(2, 0, 1) / 255.0, 256)
 
-        frame = tensor_to_cv2(x)
-        paras = get_video_crop_parameter(frame, self.landmarkpredictor)
-        kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
+        x = tensor_to_cv2(x)
+        paras = get_video_crop_parameter(x, self.landmarkpredictor)
 
         if paras is not None:
             h, w, top, bottom, left, right, scale = paras
+            kernel_1d = np.array([[0.125], [0.375], [0.375], [0.125]])
             # for HR image, we apply gaussian blur to it to avoid over-sharp stylization results
             if scale <= 0.75:
-                frame = cv2.sepFilter2D(frame, -1, kernel_1d, kernel_1d)
+                x = cv2.sepFilter2D(x, -1, kernel_1d, kernel_1d)
             if scale <= 0.375:
-                frame = cv2.sepFilter2D(frame, -1, kernel_1d, kernel_1d)
-            frame = cv2.resize(frame, (w, h))[top:bottom, left:right]
+                x = cv2.sepFilter2D(x, -1, kernel_1d, kernel_1d)
+            x = cv2.resize(x, (w, h))[top:bottom, left:right]
 
         with torch.no_grad():
-            I = align_face(frame, self.landmarkpredictor)
+            I = align_face(x, self.landmarkpredictor)
             I = cv2_to_tensor(I)
             I = ((I - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
 
             s_w = self.pspencoder(I)
             s_w = self.zplus2wplus(s_w)
 
+            x = cv2_to_tensor(x)
             x = ((x - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
             x_p = F.interpolate(
                 self.parsingpredictor(
