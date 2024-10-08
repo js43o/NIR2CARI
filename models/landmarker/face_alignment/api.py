@@ -109,14 +109,3 @@ class FaceAlignment:
 
         self.face_alignment_net.to(device, dtype=dtype)
         self.face_alignment_net.eval()
-
-        # Initialiase the depth prediciton network
-        if landmarks_type == LandmarksType.THREE_D:
-            self.depth_prediciton_net = torch.jit.load(
-                load_file_from_url(
-                    models_urls.get(pytorch_version, default_model_urls)["depth"]
-                )
-            )
-
-            self.depth_prediciton_net.to(device, dtype=dtype)
-            self.depth_prediciton_net.eval()
