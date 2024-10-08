@@ -7,7 +7,7 @@ import numpy as np
 from .utils import *
 
 
-def detect(net, img, target_size=128, device='cuda'):
+def detect(net, img, target_size=128, device="cuda"):
     H, W, C = img.shape
     orig_size = min(H, W)
     img, (xshift, yshift) = resize_and_crop_image(img, target_size)
@@ -21,11 +21,13 @@ def detect(net, img, target_size=128, device='cuda'):
 
     # TODO: ugly
     # reverses, x and y to adapt with face-alignment code
-    locs = np.concatenate((preds[:, 1:2], preds[:, 0:1], preds[:, 3:4], preds[:, 2:3]), axis=1)
+    locs = np.concatenate(
+        (preds[:, 1:2], preds[:, 0:1], preds[:, 3:4], preds[:, 2:3]), axis=1
+    )
     return [np.concatenate((locs * orig_size + shift, scores), axis=1)]
 
 
-def batch_detect(net, img_batch, target_size=128, device='cuda'):
+def batch_detect(net, img_batch, target_size=128, device="cuda"):
     """
     Inputs:
         - net: BlazeFace model
@@ -49,7 +51,9 @@ def batch_detect(net, img_batch, target_size=128, device='cuda'):
     for pred in preds:
         shift = np.array([xshift, yshift] * 2)
         scores = pred[:, -1:]
-        locs = np.concatenate((pred[:, 1:2], pred[:, 0:1], pred[:, 3:4], pred[:, 2:3]), axis=1)
+        locs = np.concatenate(
+            (pred[:, 1:2], pred[:, 0:1], pred[:, 3:4], pred[:, 2:3]), axis=1
+        )
         bboxlists.append(np.concatenate((locs * orig_size + shift, scores), axis=1))
 
     return bboxlists

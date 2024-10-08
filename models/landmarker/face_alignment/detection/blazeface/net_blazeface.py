@@ -218,9 +218,6 @@ class BlazeFace(nn.Module):
     def load_anchors_from_npy(self, arr, device=None):
         device = device or self._device()
         self.anchors = torch.tensor(arr, dtype=torch.float32, device=device)
-        assert self.anchors.ndimension() == 2
-        assert self.anchors.shape[0] == self.num_anchors
-        assert self.anchors.shape[1] == 4
 
     def _preprocess(self, x):
         """Converts the image pixels to the range [-1, 1]."""
@@ -237,8 +234,7 @@ class BlazeFace(nn.Module):
         Returns:
             A tensor with face detections.
         """
-        if isinstance(img, np.ndarray):
-            img = torch.from_numpy(img).permute((2, 0, 1))
+        img = torch.tensor(img).permute((2, 0, 1))
 
         return self.predict_on_batch(img.unsqueeze(0))[0]
 
@@ -259,8 +255,7 @@ class BlazeFace(nn.Module):
             - x,y-coordinates for the 6 keypoints
             - confidence score
         """
-        if isinstance(x, np.ndarray):
-            x = torch.from_numpy(x).permute((0, 3, 1, 2))
+        x = torch.tensor(x).permute((0, 3, 1, 2))
 
         assert x.shape[1] == 3
         assert x.shape[2] == 128
@@ -271,8 +266,7 @@ class BlazeFace(nn.Module):
         x = self._preprocess(x)
 
         # 2. Run the neural network:
-        with torch.inference_mode():
-            out = self.__call__(x)
+        out = self(x)
 
         # 3. Postprocess the raw predictions:
         detections = self._tensors_to_detections(out[0], out[1], self.anchors)
@@ -299,16 +293,6 @@ class BlazeFace(nn.Module):
         mediapipe/calculators/tflite/tflite_tensors_to_detections_calculator.cc
         mediapipe/calculators/tflite/tflite_tensors_to_detections_calculator.proto
         """
-        assert raw_box_tensor.ndimension() == 3
-        assert raw_box_tensor.shape[1] == self.num_anchors
-        assert raw_box_tensor.shape[2] == self.num_coords
-
-        assert raw_score_tensor.ndimension() == 3
-        assert raw_score_tensor.shape[1] == self.num_anchors
-        assert raw_score_tensor.shape[2] == self.num_classes
-
-        assert raw_box_tensor.shape[0] == raw_score_tensor.shape[0]
-
         detection_boxes = self._decode_boxes(raw_box_tensor, anchors)
 
         thresh = self.score_clipping_thresh

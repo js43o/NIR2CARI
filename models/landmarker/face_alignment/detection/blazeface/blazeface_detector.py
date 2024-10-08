@@ -1,11 +1,11 @@
+import numpy as np
+import torch
+import torch.nn as nn
 from torch.utils.model_zoo import load_url
 
-from ..core import FaceDetector
 from ...utils import load_file_from_url
-
 from .net_blazeface import BlazeFace
-from .detect import *
-from torch import nn
+from .utils import resize_and_crop_image
 
 models_urls = {
     "blazeface_weights": "https://github.com/hollance/BlazeFace-PyTorch/blob/master/blazeface.pth?raw=true",
@@ -51,11 +51,25 @@ class BlazeFaceDetector(nn.Module):
 
     def detect_from_image(self, tensor_or_path):
         image = tensor_or_path
-
+        H, W, C = image.shape
+        orig_size = min(H, W)
         image_size = 128
-        bboxlist = detect(
-            self.face_detector, image, target_size=image_size, device=self.device
-        )[0]
+
+        image, (xshift, yshift) = resize_and_crop_image(image, image_size)
+        preds = self.face_detector.predict_on_image(image)
+
+        if 0 == len(preds):
+            return [[]]
+
+        shift = torch.tensor([xshift, yshift] * 2)
+        scores = preds[:, -1:]
+
+        # TODO: ugly
+        # reverses, x and y to adapt with face-alignment code
+        locs = np.concatenate(
+            (preds[:, 1:2], preds[:, 0:1], preds[:, 3:4], preds[:, 2:3]), axis=1
+        )
+        bboxlist = np.concatenate((locs * orig_size + shift, scores), axis=1)
 
         return bboxlist
 
