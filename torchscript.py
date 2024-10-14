@@ -27,4 +27,5 @@ def load():
     result.save(filename)
 
 
+save()
 load()

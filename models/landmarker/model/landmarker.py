@@ -20,8 +20,8 @@ class Landmarker(nn.Module):
     def forward(self, x):
         detected_faces = self.face_detector.detect_from_image(x)
 
-        if len(detected_faces) == 0:
-            print("No faces were detected.")
+        if detected_faces.shape[1] == 0:
+            print("# No faces were detected.")
             return None
 
         landmarks = []

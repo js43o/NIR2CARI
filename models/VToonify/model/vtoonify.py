@@ -9,6 +9,7 @@ from align import align_face, get_video_crop_parameter
 from utils import resize_and_pad
 
 from ..model.encoder.encoders.psp_encoders import GradualStyleEncoder
+from models.landmarker.model.landmarker import Landmarker
 
 
 import numpy as np
@@ -53,10 +54,11 @@ class VToonify(nn.Module):
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        # preprocessing models
-        self.landmarkpredictor = dlib.shape_predictor(
-            "models/VToonify/checkpoints/shape_predictor_68_face_landmarks.dat"
-        )
+        # (구) dlib 얼굴 랜드마크 검출 모델
+        # self.landmarkpredictor = dlib.shape_predictor(
+        #     "models/VToonify/checkpoints/shape_predictor_68_face_landmarks.dat"
+        # )
+        self.landmarkpredictor = Landmarker()  # 새로운 얼굴 랜드마크 검출 모델
         self.parsingpredictor = BiSeNet(n_classes=19)
         self.parsingpredictor.load_state_dict(
             torch.load(

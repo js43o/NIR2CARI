@@ -1,29 +1,16 @@
 import numpy as np
-import dlib
 import PIL
 import scipy
 
+from utils import cv2_to_tensor
+
 
 def get_landmark(img, predictor):
-    """get landmark with dlib
-    :return: np.array shape=(68, 2)
-    """
-    detector = dlib.get_frontal_face_detector()
-    dets = detector(img, 1)
-    shape = None
+    img = cv2_to_tensor(img).permute(1, 2, 0) * 255.0
+    pred = predictor(img)
+    landmarks = pred[0].detach().cpu().numpy()
 
-    if len(dets) == 0:
-        return shape
-
-    for _, d in enumerate(dets):
-        shape = predictor(img, d)
-
-    t = list(shape.parts())
-    a = []
-    for tt in t:
-        a.append([tt.x, tt.y])
-    lm = np.array(a)
-    return lm
+    return landmarks
 
 
 def align_face(img, predictor):
