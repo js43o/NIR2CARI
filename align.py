@@ -1,19 +1,18 @@
 import numpy as np
 import PIL
 import scipy
-
-from utils import cv2_to_tensor
+import torch
+from torchvision.transforms import functional as F
 
 
 def get_landmark(img, predictor):
-    img = cv2_to_tensor(img).permute(1, 2, 0) * 255.0
-    pred = predictor(img)
-    landmarks = pred[0].detach().cpu().numpy()
+    img = img.permute(1, 2, 0) * 255.0
+    landmarks = predictor(img)[0]
 
     return landmarks
 
 
-def align_face(img, predictor):
+def align_face(img: torch.Tensor, predictor):
     """
     :param img: array
     :return: PIL Image
@@ -22,15 +21,13 @@ def align_face(img, predictor):
     if lm is None:
         return lm
 
-    img = PIL.Image.fromarray(img)
-
     lm_eye_left = lm[36:42]  # left-clockwise
     lm_eye_right = lm[42:48]  # left-clockwise
     lm_mouth_outer = lm[48:60]  # left-clockwise
 
     # Calculate auxiliary vectors.
-    eye_left = np.mean(lm_eye_left, axis=0)
-    eye_right = np.mean(lm_eye_right, axis=0)
+    eye_left = torch.mean(lm_eye_left, dim=0)
+    eye_right = torch.mean(lm_eye_right, dim=0)
     eye_avg = (eye_left + eye_right) * 0.5
     eye_to_eye = eye_right - eye_left
     mouth_left = lm_mouth_outer[0]
@@ -39,36 +36,36 @@ def align_face(img, predictor):
     eye_to_mouth = mouth_avg - eye_avg
 
     # Choose oriented crop rectangle.
-    x = eye_to_eye - np.flipud(eye_to_mouth) * [-1, 1]
-    x /= np.hypot(*x)
-    x *= max(np.hypot(*eye_to_eye) * 2.0, np.hypot(*eye_to_mouth) * 1.8)
-    y = np.flipud(x) * [-1, 1]
+    x = eye_to_eye - torch.flipud(eye_to_mouth) * [-1, 1]
+    x /= torch.hypot(*x)
+    x *= max(torch.hypot(*eye_to_eye) * 2.0, torch.hypot(*eye_to_mouth) * 1.8)
+    y = torch.flipud(x) * [-1, 1]
     c = eye_avg + eye_to_mouth * 0.1
-    quad = np.stack([c - x - y, c - x + y, c + x + y, c + x - y])
-    qsize = np.hypot(*x) * 2
+    quad = torch.stack([c - x - y, c - x + y, c + x + y, c + x - y])
+    qsize = torch.hypot(*x) * 2
 
     output_size = 256
     transform_size = 256
     enable_padding = True
 
     # Shrink.
-    shrink = int(np.floor(qsize / output_size * 0.5))
+    shrink = int(torch.floor(qsize / output_size * 0.5))
     if shrink > 1:
         rsize = (
-            int(np.rint(float(img.size[0]) / shrink)),
-            int(np.rint(float(img.size[1]) / shrink)),
+            int(torch.round(float(img.size[0]) / shrink)),
+            int(torch.round(float(img.size[1]) / shrink)),
         )
         img = img.resize(rsize, PIL.Image.ANTIALIAS)
         quad /= shrink
         qsize /= shrink
 
     # Crop.
-    border = max(int(np.rint(qsize * 0.1)), 3)
+    border = max(int(torch.round(qsize * 0.1)), 3)
     crop = (
-        int(np.floor(min(quad[:, 0]))),
-        int(np.floor(min(quad[:, 1]))),
-        int(np.ceil(max(quad[:, 0]))),
-        int(np.ceil(max(quad[:, 1]))),
+        int(torch.floor(min(quad[:, 0]))),
+        int(torch.floor(min(quad[:, 1]))),
+        int(torch.ceil(max(quad[:, 0]))),
+        int(torch.ceil(max(quad[:, 1]))),
     )
     crop = (
         max(crop[0] - border, 0),
@@ -82,10 +79,10 @@ def align_face(img, predictor):
 
     # Pad.
     pad = (
-        int(np.floor(min(quad[:, 0]))),
-        int(np.floor(min(quad[:, 1]))),
-        int(np.ceil(max(quad[:, 0]))),
-        int(np.ceil(max(quad[:, 1]))),
+        int(torch.floor(min(quad[:, 0]))),
+        int(torch.floor(min(quad[:, 1]))),
+        int(torch.ceil(max(quad[:, 0]))),
+        int(torch.ceil(max(quad[:, 1]))),
     )
     pad = (
         max(-pad[0] + border, 0),
@@ -94,22 +91,33 @@ def align_face(img, predictor):
         max(pad[3] - img.size[1] + border, 0),
     )
     if enable_padding and max(pad) > border - 4:
-        pad = np.maximum(pad, int(np.rint(qsize * 0.3)))
-        img = np.pad(
-            np.float32(img), ((pad[1], pad[3]), (pad[0], pad[2]), (0, 0)), "reflect"
+        pad = torch.maximum(pad, int(torch.round(qsize * 0.3)))
+        img = F.pad(
+            img.to(torch.float32),
+            (pad[0], pad[1], pad[2], pad[3]),
+            padding_mode="reflect",
         )
         h, w, _ = img.shape
-        y, x, _ = np.ogrid[:h, :w, :1]
-        mask = np.maximum(
-            1.0 - np.minimum(np.float32(x) / pad[0], np.float32(w - 1 - x) / pad[2]),
-            1.0 - np.minimum(np.float32(y) / pad[1], np.float32(h - 1 - y) / pad[3]),
+        y = torch.arange(h).view(-1, 1, 1)  # Shape: (h, 1, 1)
+        x = torch.arange(w).view(1, -1, 1)  # Shape: (1, w, 1)
+        mask = torch.maximum(
+            1.0
+            - torch.minimum(
+                x.to(torch.float32) / pad[0], (w - 1 - x).to(torch.float32) / pad[2]
+            ),
+            1.0
+            - torch.minimum(
+                y.to(torch.float32) / pad[1], (h - 1 - y).to(torch.float32) / pad[3]
+            ),
         )
         blur = qsize * 0.02
-        img += (scipy.ndimage.gaussian_filter(img, [blur, blur, 0]) - img) * np.clip(
+        img += (scipy.ndimage.gaussian_filter(img, [blur, blur, 0]) - img) * torch.clip(
             mask * 3.0 + 1.0, 0.0, 1.0
         )
-        img += (np.median(img, axis=(0, 1)) - img) * np.clip(mask, 0.0, 1.0)
-        img = PIL.Image.fromarray(np.uint8(np.clip(np.rint(img), 0, 255)), "RGB")
+        img += (torch.median(img, axis=(0, 1)) - img) * torch.clip(mask, 0.0, 1.0)
+        img = PIL.Image.fromarray(
+            (torch.clip(torch.round(img), 0, 255)).to(torch.uint8), "RGB"
+        )
         quad += pad[:2]
 
     # Transform.
@@ -134,14 +142,23 @@ def get_video_crop_parameter(img, predictor, padding=[200, 200, 200, 200]):
     lm_eye_left = lm[36:42]  # left-clockwise
     lm_eye_right = lm[42:48]  # left-clockwise
 
-    scale = 64.0 / (np.mean(lm_eye_right[:, 0]) - np.mean(lm_eye_left[:, 0]))
+    scale = 64.0 / (torch.mean(lm_eye_right[:, 0]) - torch.mean(lm_eye_left[:, 0]))
     center = (
-        (np.mean(lm_eye_right, axis=0) + np.mean(lm_eye_left, axis=0)) / 2
+        (torch.mean(lm_eye_right, dim=0) + torch.mean(lm_eye_left, dim=0)) / 2
     ) * scale
-    h, w = round(img.shape[0] * scale), round(img.shape[1] * scale)
-    left = max(round(center[0] - padding[0]), 0) // 8 * 8
-    right = min(round(center[0] + padding[1]), w) // 8 * 8
-    top = max(round(center[1] - padding[2]), 0) // 8 * 8
-    bottom = min(round(center[1] + padding[3]), h) // 8 * 8
+    h = int(torch.round(img.shape[0] * scale).item())
+    w = int(torch.round(img.shape[1] * scale).item())
+
+    left = max(torch.round(center[0] - padding[0]).item(), 0)
+    left = torch.div(left, 64, rounding_mode="floor")
+
+    right = min(torch.round(center[0] + padding[1]).item(), w)
+    right = torch.div(right, 64, rounding_mode="floor")
+
+    top = max(torch.round(center[1] - padding[2]).item(), 0)
+    top = torch.div(top, 64, rounding_mode="floor")
+
+    bottom = min(torch.round(center[1] + padding[3]).item(), h)
+    bottom = torch.div(bottom, 64, rounding_mode="floor")
 
     return h, w, top, bottom, left, right, scale

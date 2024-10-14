@@ -65,14 +65,16 @@ def get_keys(d, name):
     return d_filt
 
 
+""" 
 def cv2_to_tensor(input: cv2.typing.MatLike):
     image = np.array(input)
     image[...] = image[..., ::-1]  # BGR to RGB
     image = pil_to_tensor(image)
 
     return image
+ """
 
-
+""" 
 def tensor_to_cv2(input: torch.Tensor):
     if input.device != "cpu":
         input = input.detach().cpu()
@@ -81,6 +83,7 @@ def tensor_to_cv2(input: torch.Tensor):
     image[...] = np.array(image)[..., ::-1]
 
     return image
+ """
 
 
 def pil_to_tensor(input: Union[Image.Image, np.ndarray]):
@@ -90,9 +93,11 @@ def pil_to_tensor(input: Union[Image.Image, np.ndarray]):
     return image
 
 
+""" 
 def tensor_to_pil(input: torch.Tensor):
     image = input.permute(1, 2, 0) * 255.0
     image = np.array(image, dtype=np.uint8)
     image = Image.fromarray(image)
 
     return image
+ """

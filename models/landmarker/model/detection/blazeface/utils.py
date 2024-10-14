@@ -29,6 +29,7 @@ def image_resize(image, width: int = 0, height: int = 0):
 
     # resize the image
     # resized = cv2.resize(image, dim, interpolation=inter)
+    print(image.shape)
     resized = F.resize(
         image.permute(2, 0, 1),
         dim,
