@@ -2,7 +2,7 @@ import os
 import sys
 import errno
 import torch
-from typing import List
+from typing import List, Optional
 from torchvision.transforms import functional as F, InterpolationMode
 
 from urllib.parse import urlparse
@@ -14,9 +14,7 @@ except BaseException:
     from torch.hub import _get_torch_home as get_dir
 
 
-def transform(
-    point: List[float], center, scale: float, resolution: float, invert: bool = False
-):
+def transform(point, center, scale: float, resolution: float, invert: bool = False):
     """Generate and affine transformation matrix.
 
     Given a set of points, a center, a scale and a targer resolution, the
@@ -67,8 +65,10 @@ def crop(image, center, scale: float, resolution: float = 256.0):
         [type] -- [description]
     """  # Crop around the center point
     """ Crops the image around the center. Input is expected to be an np.ndarray """
-    ul = transform([1.0, 1.0], center, scale, resolution, True)
-    br = transform([resolution, resolution], center, scale, resolution, True)
+    ul = transform(torch.tensor([1.0, 1.0]), center, scale, resolution, True)
+    br = transform(
+        torch.tensor([resolution, resolution]), center, scale, resolution, True
+    )
     # pad = math.ceil(torch.norm((ul - br).float()) / 2.0 - (br[0] - ul[0]) / 2.0)
     if image.ndim > 2:
         newDim = [
@@ -82,11 +82,12 @@ def crop(image, center, scale: float, resolution: float = 256.0):
         newImg = torch.zeros(newDim, dtype=torch.float32)
     ht = image.shape[0]
     wd = image.shape[1]
+
     newX = torch.tensor(
-        [max(1, -ul[0] + 1), (min(br[0], wd) - ul[0]).item()], dtype=torch.int32
+        [max(1, -ul[0] + 1), int((min(br[0], wd) - ul[0]).item())], dtype=torch.int32
     )
     newY = torch.tensor(
-        [max(1, -ul[1] + 1), (min(br[1], ht) - ul[1]).item()], dtype=torch.int32
+        [max(1, -ul[1] + 1), int((min(br[1], ht) - ul[1]).item())], dtype=torch.int32
     )
     oldX = torch.tensor([max(1, ul[0] + 1), min(br[0], wd)], dtype=torch.int32)
     oldY = torch.tensor([max(1, ul[1] + 1), min(br[1], ht)], dtype=torch.int32)
@@ -97,6 +98,7 @@ def crop(image, center, scale: float, resolution: float = 256.0):
         newImg.permute(2, 0, 1),
         size=(int(resolution), int(resolution)),
         interpolation=InterpolationMode.BILINEAR,
+        antialias=True,
     ).permute(1, 2, 0)
     return newImg
 
@@ -138,7 +140,7 @@ def transform_np(point, center, scale: float, resolution: int, invert: bool = Fa
     return new_point.to(torch.int32)
 
 
-def get_preds_fromhm(hm, center=None, scale=None):
+def get_preds_fromhm(hm, center: Optional[torch.Tensor], scale: Optional[float]):
     """Obtain (x,y) coordinates given a set of N heatmaps. If the center
     and the scale is provided the function will return the points also in
     the original coordinate frame.
@@ -152,15 +154,15 @@ def get_preds_fromhm(hm, center=None, scale=None):
     """
     B, C, H, W = hm.shape
     hm_reshape = hm.reshape(B, C, H * W)
-    idx = torch.argmax(hm_reshape, dim=-1)
-    scores = torch.gather(hm_reshape, dim=-1, index=idx.unsqueeze(-1)).squeeze(-1)
+    idx = torch.argmax(hm_reshape, dim=-1).unsqueeze(-1)
+    scores = torch.gather(hm_reshape, dim=-1, index=idx).squeeze(-1)
     preds, preds_orig = _get_preds_fromhm(hm, idx, center, scale)
 
     return preds, preds_orig, scores
 
 
 # @jit(nopython=True)
-def _get_preds_fromhm(hm, idx, center=None, scale=None):
+def _get_preds_fromhm(hm, idx, center: Optional[torch.Tensor], scale: Optional[float]):
     """Obtain (x,y) coordinates given a set of N heatmaps and the
     coresponding locations of the maximums. If the center
     and the scale is provided the function will return the points also in
@@ -187,8 +189,8 @@ def _get_preds_fromhm(hm, idx, center=None, scale=None):
             if pX > 0 and pX < 63 and pY > 0 and pY < 63:
                 diff = torch.tensor(
                     [
-                        hm_[pY, pX + 1] - hm_[pY, pX - 1],
-                        hm_[pY + 1, pX] - hm_[pY - 1, pX],
+                        int((hm_[pY, pX + 1] - hm_[pY, pX - 1]).item()),
+                        int((hm_[pY + 1, pX] - hm_[pY - 1, pX]).item()),
                     ]
                 ).to("cuda")
                 preds[i, j] += torch.sign(diff) * 0.25

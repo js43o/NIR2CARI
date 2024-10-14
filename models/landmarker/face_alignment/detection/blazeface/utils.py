@@ -1,7 +1,5 @@
-import cv2
 import numpy as np
-import torchvision.transforms.functional as F
-from typing import Optional
+from torchvision.transforms import functional as F, InterpolationMode
 
 
 def image_resize(image, width: int = 0, height: int = 0):
@@ -31,7 +29,12 @@ def image_resize(image, width: int = 0, height: int = 0):
 
     # resize the image
     # resized = cv2.resize(image, dim, interpolation=inter)
-    resized = F.resize(image.permute(2, 0, 1), dim)
+    resized = F.resize(
+        image.permute(2, 0, 1),
+        dim,
+        interpolation=InterpolationMode.BICUBIC,
+        antialias=True,
+    )
 
     # return the resized image
     return resized
