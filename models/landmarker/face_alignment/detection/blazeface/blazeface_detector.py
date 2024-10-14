@@ -49,8 +49,7 @@ class BlazeFaceDetector(nn.Module):
         self.face_detector.to(device)
         self.face_detector.eval()
 
-    def detect_from_image(self, tensor_or_path):
-        image = tensor_or_path
+    def detect_from_image(self, image):
         H, W, C = image.shape
         orig_size = min(H, W)
         image_size = 128
@@ -66,10 +65,10 @@ class BlazeFaceDetector(nn.Module):
 
         # TODO: ugly
         # reverses, x and y to adapt with face-alignment code
-        locs = np.concatenate(
-            (preds[:, 1:2], preds[:, 0:1], preds[:, 3:4], preds[:, 2:3]), axis=1
+        locs = torch.cat(
+            (preds[:, 1:2], preds[:, 0:1], preds[:, 3:4], preds[:, 2:3]), dim=1
         )
-        bboxlist = np.concatenate((locs * orig_size + shift, scores), axis=1)
+        bboxlist = torch.cat((locs * orig_size + shift, scores), dim=1)
 
         return bboxlist
 

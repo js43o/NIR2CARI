@@ -234,8 +234,6 @@ class BlazeFace(nn.Module):
         Returns:
             A tensor with face detections.
         """
-        img = torch.tensor(img).permute((2, 0, 1))
-
         return self.predict_on_batch(img.unsqueeze(0))[0]
 
     def predict_on_batch(self, x):
@@ -255,8 +253,7 @@ class BlazeFace(nn.Module):
             - x,y-coordinates for the 6 keypoints
             - confidence score
         """
-        x = torch.tensor(x).permute((0, 3, 1, 2))
-
+        x = x.permute(0, 3, 1, 2)
         assert x.shape[1] == 3
         assert x.shape[2] == 128
         assert x.shape[3] == 128

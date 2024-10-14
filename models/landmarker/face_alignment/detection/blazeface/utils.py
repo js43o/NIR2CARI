@@ -20,18 +20,18 @@ def image_resize(image, width: int = 0, height: int = 0):
         # calculate the ratio of the height and construct the
         # dimensions
         r = height / float(h)
-        dim = (int(w * r), height)
+        dim = (height, int(w * r))
 
     # otherwise, the height is None
     else:
         # calculate the ratio of the width and construct the
         # dimensions
         r = width / float(w)
-        dim = (width, int(h * r))
+        dim = (int(h * r), width)
 
     # resize the image
     # resized = cv2.resize(image, dim, interpolation=inter)
-    resized = F.resize(image, dim)
+    resized = F.resize(image.permute(2, 0, 1), dim)
 
     # return the resized image
     return resized
@@ -39,13 +39,13 @@ def image_resize(image, width: int = 0, height: int = 0):
 
 def resize_and_crop_image(image, dim: int):
     if image.shape[0] > image.shape[1]:
-        img = image_resize(image, width=dim)
+        img = image_resize(image, width=dim).permute(1, 2, 0)
         yshift, xshift = (image.shape[0] - image.shape[1]) // 2, 0
         y_start = (img.shape[0] - img.shape[1]) // 2
         y_end = y_start + dim
         return img[y_start:y_end, :, :], (xshift, yshift)
     else:
-        img = image_resize(image, height=dim)
+        img = image_resize(image, height=dim).permute(1, 2, 0)
         yshift, xshift = 0, (image.shape[1] - image.shape[0]) // 2
         x_start = (img.shape[1] - img.shape[0]) // 2
         x_end = x_start + dim
