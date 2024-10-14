@@ -5,7 +5,7 @@ from packaging import version
 from .utils import *
 
 
-import models.landmarker.face_alignment.detection.blazeface as face_detector_module
+import models.landmarker.model.detection.blazeface as face_detector_module
 
 
 class LandmarksType(IntEnum):
