@@ -58,7 +58,7 @@ class BlazeFaceDetector(nn.Module):
         preds = self.face_detector.predict_on_image(image)
 
         if 0 == len(preds):
-            return [[]]
+            return torch.tensor([[]])
 
         shift = torch.tensor([xshift, yshift] * 2)
         scores = preds[:, -1:]
