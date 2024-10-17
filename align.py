@@ -6,7 +6,7 @@ from torchvision.transforms import functional as F
 
 
 def get_landmark(img, predictor):
-    img = img.permute(1, 2, 0) * 255.0
+    img = img * 255.0
     landmarks = predictor(img)[0]
 
     return landmarks
@@ -17,7 +17,7 @@ def align_face(img: torch.Tensor, predictor):
     :param img: array
     :return: PIL Image
     """
-    lm = get_landmark(img, predictor)
+    lm = get_landmark(img, predictor).detach().cpu()
     if lm is None:
         return lm
 
@@ -36,10 +36,10 @@ def align_face(img: torch.Tensor, predictor):
     eye_to_mouth = mouth_avg - eye_avg
 
     # Choose oriented crop rectangle.
-    x = eye_to_eye - torch.flipud(eye_to_mouth) * [-1, 1]
+    x = eye_to_eye - torch.flipud(eye_to_mouth) * torch.tensor([-1, 1])
     x /= torch.hypot(*x)
     x *= max(torch.hypot(*eye_to_eye) * 2.0, torch.hypot(*eye_to_mouth) * 1.8)
-    y = torch.flipud(x) * [-1, 1]
+    y = torch.flipud(x) * torch.tensor([-1, 1])
     c = eye_avg + eye_to_mouth * 0.1
     quad = torch.stack([c - x - y, c - x + y, c + x + y, c + x - y])
     qsize = torch.hypot(*x) * 2
@@ -55,48 +55,55 @@ def align_face(img: torch.Tensor, predictor):
             int(torch.round(float(img.size[0]) / shrink)),
             int(torch.round(float(img.size[1]) / shrink)),
         )
-        img = img.resize(rsize, PIL.Image.ANTIALIAS)
+        img = F.resize(img, rsize)
         quad /= shrink
         qsize /= shrink
 
     # Crop.
-    border = max(int(torch.round(qsize * 0.1)), 3)
+    border = torch.max((torch.round(qsize * 0.1)), torch.tensor(3))
+    crop = [
+        torch.floor(torch.min(quad[:, 0])),
+        torch.floor(torch.min(quad[:, 1])),
+        torch.ceil(torch.max(quad[:, 0])),
+        torch.ceil(torch.max(quad[:, 1])),
+    ]
     crop = (
-        int(torch.floor(min(quad[:, 0]))),
-        int(torch.floor(min(quad[:, 1]))),
-        int(torch.ceil(max(quad[:, 0]))),
-        int(torch.ceil(max(quad[:, 1]))),
+        torch.max(crop[0] - border, torch.tensor(0)),
+        torch.max(crop[1] - border, torch.tensor(0)),
+        torch.min(crop[2] + border, torch.tensor(img.shape[0])),
+        torch.min(crop[3] + border, torch.tensor(img.shape[1])),
     )
-    crop = (
-        max(crop[0] - border, 0),
-        max(crop[1] - border, 0),
-        min(crop[2] + border, img.size[0]),
-        min(crop[3] + border, img.size[1]),
-    )
-    if crop[2] - crop[0] < img.size[0] or crop[3] - crop[1] < img.size[1]:
+    if crop[2] - crop[0] < img.shape[0] or crop[3] - crop[1] < img.shape[1]:
         img = img.crop(crop)
         quad -= crop[0:2]
 
     # Pad.
     pad = (
-        int(torch.floor(min(quad[:, 0]))),
-        int(torch.floor(min(quad[:, 1]))),
-        int(torch.ceil(max(quad[:, 0]))),
-        int(torch.ceil(max(quad[:, 1]))),
+        int(torch.floor(torch.min(quad[:, 0]))),
+        int(torch.floor(torch.min(quad[:, 1]))),
+        int(torch.ceil(torch.max(quad[:, 0]))),
+        int(torch.ceil(torch.max(quad[:, 1]))),
     )
-    pad = (
-        max(-pad[0] + border, 0),
-        max(-pad[1] + border, 0),
-        max(pad[2] - img.size[0] + border, 0),
-        max(pad[3] - img.size[1] + border, 0),
+    pad = torch.tensor(
+        [
+            torch.max(-pad[0] + border, torch.tensor(0)),
+            torch.max(-pad[1] + border, torch.tensor(0)),
+            torch.max(pad[2] - img.shape[0] + border, torch.tensor(0)),
+            torch.max(pad[3] - img.shape[1] + border, torch.tensor(0)),
+        ],
     )
-    if enable_padding and max(pad) > border - 4:
-        pad = torch.maximum(pad, int(torch.round(qsize * 0.3)))
+    if enable_padding and torch.max(pad) > border - 4:
+        pad = torch.maximum(pad, torch.round(qsize * 0.3))
         img = F.pad(
-            img.to(torch.float32),
-            (pad[0], pad[1], pad[2], pad[3]),
+            img.permute(2, 0, 1).to(torch.float32),
+            (
+                int(pad[0].item()),
+                int(pad[1].item()),
+                int(pad[2].item()),
+                int(pad[3].item()),
+            ),
             padding_mode="reflect",
-        )
+        ).permute(1, 2, 0)
         h, w, _ = img.shape
         y = torch.arange(h).view(-1, 1, 1)  # Shape: (h, 1, 1)
         x = torch.arange(w).view(1, -1, 1)  # Shape: (1, w, 1)
@@ -149,16 +156,9 @@ def get_video_crop_parameter(img, predictor, padding=[200, 200, 200, 200]):
     h = int(torch.round(img.shape[0] * scale).item())
     w = int(torch.round(img.shape[1] * scale).item())
 
-    left = max(torch.round(center[0] - padding[0]).item(), 0)
-    left = torch.div(left, 64, rounding_mode="floor")
-
-    right = min(torch.round(center[0] + padding[1]).item(), w)
-    right = torch.div(right, 64, rounding_mode="floor")
-
-    top = max(torch.round(center[1] - padding[2]).item(), 0)
-    top = torch.div(top, 64, rounding_mode="floor")
-
-    bottom = min(torch.round(center[1] + padding[3]).item(), h)
-    bottom = torch.div(bottom, 64, rounding_mode="floor")
+    left = max(torch.round(center[0] - padding[0]).item(), 0) // 8 * 8
+    right = min(torch.round(center[0] + padding[1]).item(), w) // 8 * 8
+    top = max(torch.round(center[1] - padding[2]).item(), 0) // 8 * 8
+    bottom = min(torch.round(center[1] + padding[3]).item(), h) // 8 * 8
 
     return h, w, top, bottom, left, right, scale

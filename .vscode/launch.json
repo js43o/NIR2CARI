@@ -8,7 +8,7 @@
       "name": "Python 디버거: 모듈",
       "type": "debugpy",
       "request": "launch",
-      "module": "save_model.py"
+      "module": "run.py"
     }
   ]
 }

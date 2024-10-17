@@ -1,4 +1,5 @@
 dataset/*
+dataset_/*
 output/*
 __pycache__
 temp*
