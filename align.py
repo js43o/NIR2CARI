@@ -38,7 +38,7 @@ def align_face(img: torch.Tensor, predictor):
     # Choose oriented crop rectangle.
     x = eye_to_eye - torch.flipud(eye_to_mouth) * torch.tensor([-1, 1])
     x /= torch.hypot(*x)
-    x *= max(torch.hypot(*eye_to_eye) * 2.0, torch.hypot(*eye_to_mouth) * 1.8)
+    x *= torch.max(torch.hypot(*eye_to_eye) * 2.0, torch.hypot(*eye_to_mouth) * 1.8)
     y = torch.flipud(x) * torch.tensor([-1, 1])
     c = eye_avg + eye_to_mouth * 0.1
     quad = torch.stack([c - x - y, c - x + y, c + x + y, c + x - y])
@@ -122,7 +122,7 @@ def align_face(img: torch.Tensor, predictor):
             .to("cuda")
         )
         blur = qsize * 0.02
-        kernel = int(1.0 * blur + 0.5)
+        kernel = int(4.0 * blur + 0.5)
 
         img += (
             F.gaussian_blur(
@@ -138,14 +138,6 @@ def align_face(img: torch.Tensor, predictor):
 
     # Transform.
     img = F.resize(img, (transform_size, transform_size), antialias=True)
-    """
-    img = img.transform(
-        (transform_size, transform_size),
-        PIL.Image.QUAD,
-        (quad + 0.5).flatten(),
-        PIL.Image.BILINEAR,
-    )
-    """
     if output_size < transform_size:
         img = F.resize(img, (output_size, output_size), antialias=True)
 
@@ -165,12 +157,22 @@ def get_video_crop_parameter(img, predictor, padding=[200, 200, 200, 200]):
     center = (
         (torch.mean(lm_eye_right, dim=0) + torch.mean(lm_eye_left, dim=0)) / 2
     ) * scale
-    h = int(torch.round(img.shape[0] * scale).item())
-    w = int(torch.round(img.shape[1] * scale).item())
+    h = torch.round(img.shape[0] * scale).int()
+    w = torch.round(img.shape[1] * scale).int()
 
-    left = max(torch.round(center[0] - padding[0]).item(), 0) // 8 * 8
-    right = min(torch.round(center[0] + padding[1]).item(), w) // 8 * 8
-    top = max(torch.round(center[1] - padding[2]).item(), 0) // 8 * 8
-    bottom = min(torch.round(center[1] + padding[3]).item(), h) // 8 * 8
+    left = (
+        torch.max(torch.round(center[0] - padding[0]), torch.tensor(0)).int().item()
+        // 8
+        * 8
+    )
+    right = torch.min(torch.round(center[0] + padding[1]), w).int().item() // 8 * 8
+    top = (
+        torch.max(torch.round(center[1] - padding[2]), torch.tensor(0)).int().item()
+        // 8
+        * 8
+    )
+    bottom = torch.min(torch.round(center[1] + padding[3]), h).int().item() // 8 * 8
 
-    return h, w, top, bottom, left, right, scale
+    print(h.item(), w.item(), top, bottom, left, right, scale)
+
+    return h.item(), w.item(), top, bottom, left, right, scale

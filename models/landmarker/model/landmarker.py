@@ -47,18 +47,3 @@ class Landmarker(nn.Module):
             landmarks.append(pts_img)
 
         return landmarks
-
-
-"""
-module = torch.jit.script(Landmarker())
-module.save("test.pt")
-
-image = np.array(Image.open("models/landmarker/examples/Alan_Ball_0001.jpg"))
-image = torch.tensor(image)
-
-landmarker = torch.jit.load("test.pt")
-# landmarker = Landmarker()
-
-landmarks = landmarker(image)[0]
-print(landmarks)
-"""

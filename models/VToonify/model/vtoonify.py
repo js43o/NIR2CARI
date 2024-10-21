@@ -138,14 +138,13 @@ class VToonify(nn.Module):
         x = resize_and_pad(x.permute(2, 0, 1) / 255.0, 256).permute(1, 2, 0)
 
         paras = get_video_crop_parameter(x, self.landmarkpredictor)
-        print("paras:", paras)
 
         if paras is not None:
             h, w, top, bottom, left, right, scale = paras
             # for HR image, we apply gaussian blur to it to avoid over-sharp stylization results
             if scale <= 0.75:
                 x = TF.gaussian_blur(x, [3, 3], [0.5, 0.5])
-                
+
             x = TF.resize(x.permute(2, 0, 1), (h, w), antialias=True)[
                 :, top:bottom, left:right
             ]
@@ -153,7 +152,6 @@ class VToonify(nn.Module):
         with torch.no_grad():
             I = align_face(x.permute(1, 2, 0), self.landmarkpredictor)
             I = ((I - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
-            print("x, I shape", x.shape, I.shape)
 
             s_w = self.pspencoder(I)
             s_w = self.zplus2wplus(s_w)
