@@ -103,39 +103,54 @@ def align_face(img: torch.Tensor, predictor):
                 int(pad[3].item()),
             ),
             padding_mode="reflect",
-        ).permute(1, 2, 0)
-        h, w, _ = img.shape
+        )
+        c, h, w = img.shape
         y = torch.arange(h).view(-1, 1, 1)  # Shape: (h, 1, 1)
         x = torch.arange(w).view(1, -1, 1)  # Shape: (1, w, 1)
-        mask = torch.maximum(
-            1.0
-            - torch.minimum(
-                x.to(torch.float32) / pad[0], (w - 1 - x).to(torch.float32) / pad[2]
-            ),
-            1.0
-            - torch.minimum(
-                y.to(torch.float32) / pad[1], (h - 1 - y).to(torch.float32) / pad[3]
-            ),
+        mask = (
+            torch.maximum(
+                1.0
+                - torch.minimum(
+                    x.to(torch.float32) / pad[0], (w - 1 - x).to(torch.float32) / pad[2]
+                ),
+                1.0
+                - torch.minimum(
+                    y.to(torch.float32) / pad[1], (h - 1 - y).to(torch.float32) / pad[3]
+                ),
+            )
+            .permute(2, 0, 1)
+            .to("cuda")
         )
         blur = qsize * 0.02
-        img += (scipy.ndimage.gaussian_filter(img, [blur, blur, 0]) - img) * torch.clip(
-            mask * 3.0 + 1.0, 0.0, 1.0
+        kernel = int(4.0 * blur + 0.5)
+
+        print("blur & kernel", blur, kernel)
+
+        img += (
+            F.gaussian_blur(
+                img, kernel_size=(kernel + (1 - kernel % 2)), sigma=[blur, blur]
+            )
+            - img
+        ) * torch.clip(mask * 3.0 + 1.0, 0.0, 1.0)
+        # img += (torch.median(img, axis=(0, 1)) - img) * torch.clip(mask, 0.0, 1.0)
+        img += torch.median(torch.flatten(img, 0, 1), 0).values * torch.clip(
+            mask, 0.0, 1.0
         )
-        img += (torch.median(img, axis=(0, 1)) - img) * torch.clip(mask, 0.0, 1.0)
-        img = PIL.Image.fromarray(
-            (torch.clip(torch.round(img), 0, 255)).to(torch.uint8), "RGB"
-        )
+        img = torch.clip(torch.round(img), 0, 255).to(torch.uint8)
         quad += pad[:2]
 
     # Transform.
+    img = F.resize(img, (transform_size, transform_size), antialias=True)
+    """
     img = img.transform(
         (transform_size, transform_size),
         PIL.Image.QUAD,
         (quad + 0.5).flatten(),
         PIL.Image.BILINEAR,
     )
+    """
     if output_size < transform_size:
-        img = img.resize((output_size, output_size), PIL.Image.ANTIALIAS)
+        img = F.resize(img, (output_size, output_size), antialias=True)
 
     # Save aligned image.
     return img

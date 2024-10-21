@@ -6,7 +6,6 @@ import os
 import torch
 import argparse
 from PIL import Image
-import time
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -15,7 +14,7 @@ parser.add_argument(
     "--gpu_ids", type=str, help="which gpu when going inference", default="0"
 )
 parser.add_argument(
-    "--dataroot", type=str, help="path where input images exist", default="dataset"
+    "--dataroot", type=str, help="path where input images exist", default="dataset_"
 )
 parser.add_argument(
     "--output", type=str, help="path where output images will be", default="output"

@@ -137,7 +137,9 @@ class VToonify(nn.Module):
         x = ((x + 1) / 2.0 * 255.0).clip(0, 255).int()
         x = resize_and_pad(x.permute(2, 0, 1) / 255.0, 256).permute(1, 2, 0)
 
+        print("x before shape:", x.shape)
         paras = get_video_crop_parameter(x, self.landmarkpredictor)
+        print("paras:", paras)
 
         if paras is not None:
             h, w, top, bottom, left, right, scale = paras
@@ -150,11 +152,11 @@ class VToonify(nn.Module):
             if scale <= 0.375:
                 pass
             #     x = cv2.sepFilter2D(x, -1, kernel_1d, kernel_1d)
-            print("x before", x.shape, h, w, top, bottom, left, right)
             x = FF.resize(x.permute(2, 0, 1), (h, w), antialias=True)[
                 top:bottom, left:right
             ]
 
+        print("x after shape:", x.shape)
         with torch.no_grad():
             I = align_face(x.permute(1, 2, 0), self.landmarkpredictor)
             I = ((I - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
