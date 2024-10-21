@@ -5,18 +5,11 @@ import torch.nn.functional as F
 
 from .bisenet.model import BiSeNet
 from .stylegan.model import Generator
-from align import align_face, get_video_crop_parameter
 from utils import resize_and_pad
 
 from ..model.encoder.encoders.psp_encoders import GradualStyleEncoder
 from models.landmarker.model.landmarker import Landmarker
 from torchvision.transforms import functional as TF
-
-import numpy as np
-import cv2
-import dlib
-
-# from utils import tensor_to_cv2, cv2_to_tensor
 
 
 def load_psp_standalone(checkpoint_path, device="cuda"):
@@ -55,10 +48,6 @@ class VToonify(nn.Module):
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        # (구) dlib 얼굴 랜드마크 검출 모델
-        # self.landmarkpredictor = dlib.shape_predictor(
-        #     "models/VToonify/checkpoints/shape_predictor_68_face_landmarks.dat"
-        # )
         self.landmarkpredictor = Landmarker()  # 새로운 얼굴 랜드마크 검출 모델
         self.parsingpredictor = BiSeNet(n_classes=19)
         self.parsingpredictor.load_state_dict(
@@ -137,7 +126,7 @@ class VToonify(nn.Module):
         x = ((x + 1) / 2.0 * 255.0).clip(0, 255).int()
         x = resize_and_pad(x.permute(2, 0, 1) / 255.0, 256).permute(1, 2, 0)
 
-        paras = get_video_crop_parameter(x, self.landmarkpredictor)
+        paras = self.get_video_crop_parameter(x)
 
         if paras is not None:
             h, w, top, bottom, left, right, scale = paras
@@ -150,7 +139,7 @@ class VToonify(nn.Module):
             ]
 
         with torch.no_grad():
-            I = align_face(x.permute(1, 2, 0), self.landmarkpredictor)
+            I = self.align_face(x.permute(1, 2, 0))
             I = ((I - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
 
             s_w = self.pspencoder(I)
@@ -254,3 +243,172 @@ class VToonify(nn.Module):
         return self.generator.style(
             zplus.reshape(zplus.shape[0] * zplus.shape[1], zplus.shape[2])
         ).reshape(zplus.shape)
+
+    ########## image alignment methods ##########
+
+    def get_landmark(self, img):
+        landmarks = self.landmarkpredictor(img * 255.0)[0]
+
+        return landmarks
+
+    def align_face(self, img):
+        lm = self.get_landmark(img).detach().cpu()
+        if lm is None:
+            return lm
+
+        lm_eye_left = lm[36:42]  # left-clockwise
+        lm_eye_right = lm[42:48]  # left-clockwise
+        lm_mouth_outer = lm[48:60]  # left-clockwise
+
+        # Calculate auxiliary vectors.
+        eye_left = torch.mean(lm_eye_left, dim=0)
+        eye_right = torch.mean(lm_eye_right, dim=0)
+        eye_avg = (eye_left + eye_right) * 0.5
+        eye_to_eye = eye_right - eye_left
+        mouth_left = lm_mouth_outer[0]
+        mouth_right = lm_mouth_outer[6]
+        mouth_avg = (mouth_left + mouth_right) * 0.5
+        eye_to_mouth = mouth_avg - eye_avg
+
+        # Choose oriented crop rectangle.
+        x = eye_to_eye - torch.flipud(eye_to_mouth) * torch.tensor([-1, 1])
+        x /= torch.hypot(*x)
+        x *= torch.max(torch.hypot(*eye_to_eye) * 2.0, torch.hypot(*eye_to_mouth) * 1.8)
+        y = torch.flipud(x) * torch.tensor([-1, 1])
+        c = eye_avg + eye_to_mouth * 0.1
+        quad = torch.stack([c - x - y, c - x + y, c + x + y, c + x - y])
+        qsize = torch.hypot(*x) * 2
+
+        output_size = 256
+        transform_size = 256
+        enable_padding = True
+
+        # Shrink.
+        shrink = int(torch.floor(qsize / output_size * 0.5))
+        if shrink > 1:
+            rsize = (
+                int(torch.round(float(img.size[0]) / shrink)),
+                int(torch.round(float(img.size[1]) / shrink)),
+            )
+            img = TF.resize(img, rsize)
+            quad /= shrink
+            qsize /= shrink
+
+        # Crop.
+        border = torch.max((torch.round(qsize * 0.1)), torch.tensor(3))
+        crop = [
+            torch.floor(torch.min(quad[:, 0])),
+            torch.floor(torch.min(quad[:, 1])),
+            torch.ceil(torch.max(quad[:, 0])),
+            torch.ceil(torch.max(quad[:, 1])),
+        ]
+        crop = (
+            torch.max(crop[0] - border, torch.tensor(0)),
+            torch.max(crop[1] - border, torch.tensor(0)),
+            torch.min(crop[2] + border, torch.tensor(img.shape[0])),
+            torch.min(crop[3] + border, torch.tensor(img.shape[1])),
+        )
+        if crop[2] - crop[0] < img.shape[0] or crop[3] - crop[1] < img.shape[1]:
+            img = img.crop(crop)
+            quad -= crop[0:2]
+
+        # Pad.
+        pad = (
+            int(torch.floor(torch.min(quad[:, 0]))),
+            int(torch.floor(torch.min(quad[:, 1]))),
+            int(torch.ceil(torch.max(quad[:, 0]))),
+            int(torch.ceil(torch.max(quad[:, 1]))),
+        )
+        pad = torch.tensor(
+            [
+                torch.max(-pad[0] + border, torch.tensor(0)),
+                torch.max(-pad[1] + border, torch.tensor(0)),
+                torch.max(pad[2] - img.shape[0] + border, torch.tensor(0)),
+                torch.max(pad[3] - img.shape[1] + border, torch.tensor(0)),
+            ],
+        )
+        if enable_padding and torch.max(pad) > border - 4:
+            pad = torch.maximum(pad, torch.round(qsize * 0.3))
+            img = TF.pad(
+                img.permute(2, 0, 1).to(torch.float32),
+                (
+                    int(pad[0].item()),
+                    int(pad[1].item()),
+                    int(pad[2].item()),
+                    int(pad[3].item()),
+                ),
+                padding_mode="reflect",
+            )
+            c, h, w = img.shape
+            y = torch.arange(h).view(-1, 1, 1)  # Shape: (h, 1, 1)
+            x = torch.arange(w).view(1, -1, 1)  # Shape: (1, w, 1)
+            mask = (
+                torch.maximum(
+                    1.0
+                    - torch.minimum(
+                        x.to(torch.float32) / pad[0],
+                        (w - 1 - x).to(torch.float32) / pad[2],
+                    ),
+                    1.0
+                    - torch.minimum(
+                        y.to(torch.float32) / pad[1],
+                        (h - 1 - y).to(torch.float32) / pad[3],
+                    ),
+                )
+                .permute(2, 0, 1)
+                .to("cuda")
+            )
+            blur = qsize * 0.02
+            kernel = int(4.0 * blur + 0.5)
+
+            img += (
+                TF.gaussian_blur(
+                    img, kernel_size=(kernel + (1 - kernel % 2)), sigma=[blur, blur]
+                )
+                - img
+            ) * torch.clip(mask * 3.0 + 1.0, 0.0, 1.0)
+            img += torch.median(torch.flatten(img, 0, 1), 0).values * torch.clip(
+                mask, 0.0, 1.0
+            )
+            img = torch.clip(torch.round(img), 0, 255).to(torch.uint8)
+            quad += pad[:2]
+
+        # Transform.
+        img = TF.resize(img, (transform_size, transform_size), antialias=True)
+        if output_size < transform_size:
+            img = TF.resize(img, (output_size, output_size), antialias=True)
+
+        return img
+
+    def get_video_crop_parameter(self, img):
+        lm = self.get_landmark(img)
+        if lm is None:
+            return None
+
+        lm_eye_left = lm[36:42]  # left-clockwise
+        lm_eye_right = lm[42:48]  # left-clockwise
+        padding = [200, 200, 200, 200]
+
+        scale = 64.0 / (torch.mean(lm_eye_right[:, 0]) - torch.mean(lm_eye_left[:, 0]))
+        center = (
+            (torch.mean(lm_eye_right, dim=0) + torch.mean(lm_eye_left, dim=0)) / 2
+        ) * scale
+        h = torch.round(img.shape[0] * scale).int()
+        w = torch.round(img.shape[1] * scale).int()
+
+        left = (
+            torch.max(torch.round(center[0] - padding[0]), torch.tensor(0)).int().item()
+            // 8
+            * 8
+        )
+        right = torch.min(torch.round(center[0] + padding[1]), w).int().item() // 8 * 8
+        top = (
+            torch.max(torch.round(center[1] - padding[2]), torch.tensor(0)).int().item()
+            // 8
+            * 8
+        )
+        bottom = torch.min(torch.round(center[1] + padding[3]), h).int().item() // 8 * 8
+
+        print(h.item(), w.item(), top, bottom, left, right, scale)
+
+        return h.item(), w.item(), top, bottom, left, right, scale
