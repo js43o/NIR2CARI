@@ -122,9 +122,7 @@ def align_face(img: torch.Tensor, predictor):
             .to("cuda")
         )
         blur = qsize * 0.02
-        kernel = int(4.0 * blur + 0.5)
-
-        print("blur & kernel", blur, kernel)
+        kernel = int(1.0 * blur + 0.5)
 
         img += (
             F.gaussian_blur(
@@ -132,7 +130,6 @@ def align_face(img: torch.Tensor, predictor):
             )
             - img
         ) * torch.clip(mask * 3.0 + 1.0, 0.0, 1.0)
-        # img += (torch.median(img, axis=(0, 1)) - img) * torch.clip(mask, 0.0, 1.0)
         img += torch.median(torch.flatten(img, 0, 1), 0).values * torch.clip(
             mask, 0.0, 1.0
         )
