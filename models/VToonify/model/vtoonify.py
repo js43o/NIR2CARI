@@ -336,7 +336,7 @@ class VToonify(nn.Module):
             int(torch.ceil(torch.max(quad[:, 0]))),
             int(torch.ceil(torch.max(quad[:, 1]))),
         )
-        pad = torch.tensor(
+        pad = torch.stack(
             [
                 torch.max(-pad[0] + border, torch.tensor(0)),
                 torch.max(-pad[1] + border, torch.tensor(0)),
