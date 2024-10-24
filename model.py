@@ -70,6 +70,8 @@ class NIR2CARI(torch.nn.Module):
         # vtoonify
         caricatured = self.vtoonify(colorized).squeeze()
 
+        print("CARI:", caricatured.shape)
+
         """
         # pixel2style2pixel
         caricatured = self.pSp(colorized)[0]

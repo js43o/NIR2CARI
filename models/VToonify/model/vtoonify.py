@@ -134,7 +134,7 @@ class VToonify(nn.Module):
             if scale <= 0.75:
                 x = TF.gaussian_blur(x, [3, 3], [0.5, 0.5])
 
-            x = TF.resize(x.permute(2, 0, 1), (h, w), antialias=True)[
+            x = TF.resize(x.permute(2, 0, 1), [int(h), int(w)], antialias=True)[
                 :, top:bottom, left:right
             ]
 
@@ -247,14 +247,18 @@ class VToonify(nn.Module):
     ########## image alignment methods ##########
 
     def get_landmark(self, img):
-        landmarks = self.landmarkpredictor(img * 255.0)[0]
+        landmarks = self.landmarkpredictor(img * 255.0)
+        if landmarks is None:
+            return None
 
-        return landmarks
+        return landmarks[0]
 
     def align_face(self, img):
-        lm = self.get_landmark(img).detach().cpu()
+        lm = self.get_landmark(img)
         if lm is None:
-            return lm
+            return img
+
+        lm = lm.detach().cpu()
 
         lm_eye_left = lm[36:42]  # left-clockwise
         lm_eye_right = lm[42:48]  # left-clockwise
@@ -272,12 +276,15 @@ class VToonify(nn.Module):
 
         # Choose oriented crop rectangle.
         x = eye_to_eye - torch.flipud(eye_to_mouth) * torch.tensor([-1, 1])
-        x /= torch.hypot(*x)
-        x *= torch.max(torch.hypot(*eye_to_eye) * 2.0, torch.hypot(*eye_to_mouth) * 1.8)
+        x /= torch.hypot(x[0], x[1])
+        x *= torch.max(
+            torch.hypot(eye_to_eye[0], eye_to_eye[1]) * 2.0,
+            torch.hypot(eye_to_mouth[0], eye_to_mouth[1]) * 1.8,
+        )
         y = torch.flipud(x) * torch.tensor([-1, 1])
         c = eye_avg + eye_to_mouth * 0.1
         quad = torch.stack([c - x - y, c - x + y, c + x + y, c + x - y])
-        qsize = torch.hypot(*x) * 2
+        qsize = torch.hypot(x[0], x[1]) * 2
 
         output_size = 256
         transform_size = 256
@@ -287,8 +294,8 @@ class VToonify(nn.Module):
         shrink = int(torch.floor(qsize / output_size * 0.5))
         if shrink > 1:
             rsize = (
-                int(torch.round(float(img.size[0]) / shrink)),
-                int(torch.round(float(img.size[1]) / shrink)),
+                int(torch.round(float(img.shape[0]) / shrink)),
+                int(torch.round(float(img.shape[1]) / shrink)),
             )
             img = TF.resize(img, rsize)
             quad /= shrink
@@ -303,14 +310,24 @@ class VToonify(nn.Module):
             torch.ceil(torch.max(quad[:, 1])),
         ]
         crop = (
-            torch.max(crop[0] - border, torch.tensor(0)),
-            torch.max(crop[1] - border, torch.tensor(0)),
-            torch.min(crop[2] + border, torch.tensor(img.shape[0])),
-            torch.min(crop[3] + border, torch.tensor(img.shape[1])),
+            int(torch.max(crop[0] - border, torch.tensor(0)).item()),  # left
+            int(torch.max(crop[1] - border, torch.tensor(0)).item()),  # top
+            int(
+                torch.min(crop[2] + border, torch.tensor(img.shape[0])).item()
+            ),  # right
+            int(
+                torch.min(crop[3] + border, torch.tensor(img.shape[1])).item()
+            ),  # bottom
         )
         if crop[2] - crop[0] < img.shape[0] or crop[3] - crop[1] < img.shape[1]:
-            img = img.crop(crop)
-            quad -= crop[0:2]
+            img = TF.crop(
+                img.permute(2, 0, 1),
+                crop[1],
+                crop[0],
+                crop[3],
+                crop[2],
+            ).permute(1, 2, 0)
+            quad -= torch.tensor([crop[1], crop[0]])
 
         # Pad.
         pad = (
@@ -339,7 +356,7 @@ class VToonify(nn.Module):
                 ),
                 padding_mode="reflect",
             )
-            c, h, w = img.shape
+            _, h, w = img.shape
             y = torch.arange(h).view(-1, 1, 1)  # Shape: (h, 1, 1)
             x = torch.arange(w).view(1, -1, 1)  # Shape: (1, w, 1)
             mask = (
@@ -358,12 +375,14 @@ class VToonify(nn.Module):
                 .permute(2, 0, 1)
                 .to("cuda")
             )
-            blur = qsize * 0.02
+            blur = float(qsize * 0.02)
             kernel = int(4.0 * blur + 0.5)
 
             img += (
                 TF.gaussian_blur(
-                    img, kernel_size=(kernel + (1 - kernel % 2)), sigma=[blur, blur]
+                    img,
+                    kernel_size=[kernel + (1 - kernel % 2), kernel + (1 - kernel % 2)],
+                    sigma=[blur, blur],
                 )
                 - img
             ) * torch.clip(mask * 3.0 + 1.0, 0.0, 1.0)
@@ -408,7 +427,5 @@ class VToonify(nn.Module):
             * 8
         )
         bottom = torch.min(torch.round(center[1] + padding[3]), h).int().item() // 8 * 8
-
-        print(h.item(), w.item(), top, bottom, left, right, scale)
 
         return h.item(), w.item(), top, bottom, left, right, scale

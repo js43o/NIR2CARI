@@ -14,7 +14,7 @@ parser.add_argument(
     "--gpu_ids", type=str, help="which gpu when going inference", default="0"
 )
 parser.add_argument(
-    "--dataroot", type=str, help="path where input images exist", default="dataset_"
+    "--dataroot", type=str, help="path where input images exist", default="dataset"
 )
 parser.add_argument(
     "--output", type=str, help="path where output images will be", default="output"
