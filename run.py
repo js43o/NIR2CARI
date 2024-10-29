@@ -11,10 +11,16 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--dataroot", type=str, help="path where input images exist", default="dataset"
+    "--dataroot", type=str, help="a path where input images exist", default="dataset"
 )
 parser.add_argument(
-    "--output", type=str, help="path where output images will be", default="output"
+    "--output", type=str, help="a path where output images will be", default="output"
+)
+parser.add_argument(
+    "--caricature_model",
+    type=str,
+    help='which caricature model to be used for initial caricature generation ("vtoonify" | "vtoonify_no_align" | "psp")',
+    default="vtoonify",
 )
 options = vars(parser.parse_args())
 
@@ -24,7 +30,7 @@ if __name__ == "__main__":
     dataset = data_loader.load_data()
     os.makedirs(options["output"], exist_ok=True)
 
-    nir2cari = NIR2CARI(options)
+    nir2cari = NIR2CARI(options["caricature_model"])
 
     for i, data in enumerate(dataset):
         image = data["label"]

@@ -121,26 +121,33 @@ class VToonify(nn.Module):
             ]
         )
 
-    def forward(self, x: torch.Tensor):
-        x = x.data[0].permute((1, 2, 0))
+    def forward(self, x: torch.Tensor, skip_align: bool = False):
+        x = x.data[0]
         x = ((x + 1) / 2.0 * 255.0).clip(0, 255).int()
-        x = resize_and_pad(x.permute(2, 0, 1) / 255.0, 256).permute(1, 2, 0)
+        x = resize_and_pad(x / 255.0, 256)
 
-        paras = self.get_video_crop_parameter(x)
+        if not skip_align:
+            paras = self.get_video_crop_parameter(x.permute(1, 2, 0))
 
-        if paras is not None:
-            h, w, top, bottom, left, right, scale = paras
-            # for HR image, we apply gaussian blur to it to avoid over-sharp stylization results
-            if scale <= 0.75:
-                x = TF.gaussian_blur(x, [3, 3], [0.5, 0.5])
+            if paras is not None:
+                h, w, top, bottom, left, right, scale = paras
+                # for HR image, we apply gaussian blur to it to avoid over-sharp stylization results
+                if scale <= 0.75:
+                    x = TF.gaussian_blur(x, [3, 3], [0.5, 0.5])
 
-            x = TF.resize(x.permute(2, 0, 1), [int(h), int(w)], antialias=True)[
-                :, top:bottom, left:right
-            ]
+                x = TF.resize(x, [int(h), int(w)], antialias=True)[
+                    :, top:bottom, left:right
+                ]
 
         with torch.no_grad():
-            I = self.align_face(x.permute(1, 2, 0))
-            I = ((I - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
+            I = x.clone().unsqueeze(dim=0).to(self.device)
+
+            if not skip_align:
+                I = (
+                    ((self.align_face(x.permute(1, 2, 0)) - 0.5) / 0.5)
+                    .unsqueeze(dim=0)
+                    .to(self.device)
+                )
 
             s_w = self.pspencoder(I)
             s_w = self.zplus2wplus(s_w)
