@@ -26,10 +26,11 @@ options = vars(parser.parse_args())
 
 
 if __name__ == "__main__":
-    data_loader = CreateDataLoader(options)
+    data_loader = CreateDataLoader(options["dataroot"])
     dataset = data_loader.load_data()
     os.makedirs(options["output"], exist_ok=True)
 
+    print("▶ Loading models...")
     nir2cari = NIR2CARI(options["caricature_model"])
 
     for i, data in enumerate(dataset):
@@ -40,3 +41,5 @@ if __name__ == "__main__":
 
         result = Image.fromarray(result.detach().cpu().numpy().astype(np.uint8))
         result.save("%s/%s.png" % (options["output"], filename))
+
+    print("▶ Done!")

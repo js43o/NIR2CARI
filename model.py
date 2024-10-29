@@ -70,7 +70,7 @@ class NIR2CARI(torch.nn.Module):
 
     def forward(self, image: torch.Tensor):
         colorized = self.pix2pixHD(image)
-        caricatured = None
+        caricatured = colorized
 
         if self.caricature_model.startswith("vtoonify"):
             skip_align = "no_align" in self.caricature_model

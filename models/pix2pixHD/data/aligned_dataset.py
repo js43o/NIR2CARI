@@ -5,10 +5,9 @@ from PIL import Image
 
 
 class AlignedDataset(BaseDataset):
-    def initialize(self, opt):
-        self.opt = opt
-        self.root = opt["dataroot"]
-        self.dir_A = os.path.join(opt["dataroot"])
+    def initialize(self, dataroot: str):
+        self.root = dataroot
+        self.dir_A = os.path.join(dataroot)
         self.A_paths = sorted(make_dataset(self.dir_A))
         self.dataset_size = len(self.A_paths)
 
@@ -16,8 +15,8 @@ class AlignedDataset(BaseDataset):
         ### input A (label maps)
         A_path = self.A_paths[index]
         A = Image.open(A_path)
-        params = get_params(self.opt, A.size)
-        transform_A = get_transform(self.opt, params)
+        params = get_params(A.size)
+        transform_A = get_transform(params)
         A_tensor = transform_A(A.convert("RGB"))
         B_tensor = inst_tensor = feat_tensor = 0
 

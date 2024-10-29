@@ -2,14 +2,14 @@ import torch.utils.data
 from .base_data_loader import BaseDataLoader
 
 
-def CreateDataset(opt):
+def CreateDataset(dataroot: str):
     dataset = None
     from .aligned_dataset import AlignedDataset
 
     dataset = AlignedDataset()
 
     # print("dataset [%s] was created" % (dataset.name()))
-    dataset.initialize(opt)
+    dataset.initialize(dataroot)
     return dataset
 
 
@@ -17,9 +17,9 @@ class CustomDatasetDataLoader(BaseDataLoader):
     def name(self):
         return "CustomDatasetDataLoader"
 
-    def initialize(self, opt):
-        BaseDataLoader.initialize(self, opt)
-        self.dataset = CreateDataset(opt)
+    def initialize(self, dataroot: str):
+        BaseDataLoader.initialize(self, dataroot)
+        self.dataset = CreateDataset(dataroot)
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
             batch_size=1,

@@ -12,11 +12,11 @@ class BaseDataset(data.Dataset):
     def name(self):
         return "BaseDataset"
 
-    def initialize(self, opt):
+    def initialize(self):
         pass
 
 
-def get_params(opt, size):
+def get_params(size):
     w, h = size
     new_h = h
     new_w = w
@@ -28,7 +28,7 @@ def get_params(opt, size):
     return {"crop_pos": (x, y), "flip": flip}
 
 
-def get_transform(opt, params, method=Image.BICUBIC, normalize=True):
+def get_transform(params, method=Image.BICUBIC, normalize=True):
     transform_list = []
     transform_list.append(
         transforms.Lambda(lambda img: __scale_width(img, 256, method))
