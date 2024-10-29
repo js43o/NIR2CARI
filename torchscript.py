@@ -14,7 +14,9 @@ def save():
 
 def load():
     model = torch.jit.load("torchscripts/nir2cari_psp.pt")
-    filename = "square.jpg"
+
+    # 테스트용 샘플 이미지
+    filename = "Anthony_Garotinho_0001.jpg"
     image = (
         torch.tensor(cv2.imread("dataset/%s" % filename))
         .permute(2, 0, 1)
@@ -26,7 +28,8 @@ def load():
 
     result = Image.fromarray(result.detach().cpu().numpy().astype(np.uint8))
     result.save(filename)
-    print("LOAD COMPLETED")
+
+    print("LOAD & INFERENCE COMPLETED")
 
 
 save()

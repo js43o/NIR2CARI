@@ -23,4 +23,4 @@ A caricature generator from near-infrared (NIR) face images
 3. `output` 폴더에 변환된 캐리커처 이미지가 출력됩니다.
 
 - 다음과 같이 인자를 직접 지정하여 실행할 수 있습니다.<br />
-  `python run.py --gpu_ids 3 --dataroot "../nir_images" --output "../cari_images"`
+  `python run.py --dataroot ../nir_images --output ../cari_images`

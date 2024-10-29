@@ -28,21 +28,14 @@ def get_norm_layer(norm_type="instance"):
 
 
 def define_G(
-    input_nc,
-    output_nc,
-    ngf,
-    n_downsample_global=3,
-    n_blocks_global=9,
-    norm="instance",
-    gpu_ids=[],
+    input_nc, output_nc, ngf, n_downsample_global=3, n_blocks_global=9, norm="instance"
 ):
     norm_layer = get_norm_layer(norm_type=norm)
     netG = GlobalGenerator(
         input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, norm_layer
     )
-    if len(gpu_ids) > 0:
-        assert torch.cuda.is_available()
-        netG.cuda(gpu_ids[0])
+    assert torch.cuda.is_available()
+    netG.to("cuda")
 
     netG.apply(weights_init)
 

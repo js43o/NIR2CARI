@@ -1,8 +1,7 @@
 from models.pix2pixHD.models.pix2pixHD_model import Pix2PixHDModel
 
 from models.VToonify.model.vtoonify import VToonify
-
-# from models.pixel2style2pixel.models.psp import pSp
+from models.pixel2style2pixel.models.psp import pSp
 
 from models.CycleGAN.models import GeneratorResNet
 from utils import *
@@ -12,9 +11,7 @@ import torchvision.transforms.functional as F
 
 
 class NIR2CARI(torch.nn.Module):
-    def __init__(
-        self, options={"dataroot": "dataset", "output": "output", "gpu_ids": [0]}
-    ):
+    def __init__(self, options={"dataroot": "dataset", "output": "output"}):
         super(NIR2CARI, self).__init__()
         self.opt = options
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -27,6 +24,7 @@ class NIR2CARI(torch.nn.Module):
             torch.load("models/pix2pixHD/checkpoints/latest_net_G.pth")
         )
 
+        """
         # vtoonify
         self.vtoonify = VToonify()
         self.vtoonify.load_state_dict(
@@ -37,8 +35,8 @@ class NIR2CARI(torch.nn.Module):
             strict=False,
         )
         self.vtoonify.to(self.device)
-
         """
+
         # pSp
         self.pSp = pSp()
         pSpCheckpoints = torch.load(
@@ -52,7 +50,6 @@ class NIR2CARI(torch.nn.Module):
         )
         self.pSp.eval()
         self.pSp.cuda()
-        """
 
         # cyclegan
         self.cyclegan = GeneratorResNet((3, 1024, 1024), 9)
@@ -67,13 +64,13 @@ class NIR2CARI(torch.nn.Module):
         # pix2pixHD
         colorized = self.pix2pixHD(image)
 
+        """
         # vtoonify
         caricatured = self.vtoonify(colorized).squeeze()
-
         """
+
         # pixel2style2pixel
         caricatured = self.pSp(colorized)[0]
-        """
 
         # cyclegan
         Y, I, Q = yiq_from_image(caricatured)

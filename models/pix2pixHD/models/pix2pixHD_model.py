@@ -6,7 +6,7 @@ from .networks import define_G
 class Pix2PixHDModel(nn.Module):
     def __init__(self):
         super(Pix2PixHDModel, self).__init__()
-        self.netG = define_G(3, 3, 64, 4, 9, "instance", gpu_ids=[0])
+        self.netG = define_G(3, 3, 64, 4, 9, "instance")
 
     def forward(self, image):
         image = image.cuda()
