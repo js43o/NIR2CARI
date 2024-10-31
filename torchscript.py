@@ -27,3 +27,7 @@ def load(caricature_model: str = "vtoonify"):
     result.save("%s" % filename)
 
     print("LOAD & INFERENCE COMPLETED")
+
+
+save("vtoonify")
+load("vtoonify")
