@@ -8,7 +8,8 @@ from utils import *
 
 import torch
 import torchvision.transforms.functional as F
-from typing import Union
+
+import torchvision
 
 CARICATURE_MODELS = ["vtoonify", "vtoonify_no_align", "psp"]
 
@@ -70,20 +71,25 @@ class NIR2CARI(torch.nn.Module):
 
     def forward(self, image: torch.Tensor):
         # NIR → RGB 복원 모델 Inference
-        colorized = self.pix2pixHD(image)
+        colorized = (
+            (self.pix2pixHD(image).squeeze() / 2.0 * 255.0 + 127.0).int().clip(0, 255)
+        )
         caricatured = colorized
 
         # RGB → 캐리커처 변환 모델 Inference
         if self.caricature_model.startswith("vtoonify"):
             # 얼굴 랜드마크 검출 및 입력 영상 정렬 단계 생략 여부
             skip_align = "no_align" in self.caricature_model
+            """ 임시 코드
+            print("$ import test image")
+            colorized = torchvision.io.read_image("test.jpg").to("cuda")
+            """
             caricatured = self.vtoonify(colorized, skip_align).squeeze()
         elif self.caricature_model == "psp":
             caricatured = self.pSp(colorized)[0]
         else:
             # 지정된 캐리커처 변환 모델이 없을 경우, Inference 중단 후 RGB Colorized 결과물 반환
-            colorized = (colorized.squeeze().permute(1, 2, 0) * 255.0 + 1).clip(0, 255)
-            return colorized
+            return colorized.permute(1, 2, 0)
 
         # RGB → YIQ 색 공간 변환 후 Y 채널에 대해서만 Style transfer 적용
         Y, I, Q = yiq_from_image(caricatured)

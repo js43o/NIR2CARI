@@ -5,7 +5,6 @@ import torch.nn.functional as F
 
 from .bisenet.model import BiSeNet
 from .stylegan.model import Generator
-from utils import resize_and_pad
 
 from ..model.encoder.encoders.psp_encoders import GradualStyleEncoder
 from models.landmarker.model.landmarker import Landmarker
@@ -133,14 +132,13 @@ class VToonify(nn.Module):
         """주어진 입력 얼굴 영상을 상응하는 캐리커처 영상으로 변환합니다.
 
         Args:
-            x.data[0] (torch.Tensor): 입력 얼굴 영상
+            x (torch.Tensor): 입력 얼굴 영상
             skip_align (bool, optional): 얼굴 랜드마크 검출 및 입력 영상 정렬 생략 여부
 
         Returns:
             torch.Tensor: 출력 캐리커처 영상
         """
-        x = ((x.data[0] + 1) / 2.0 * 255.0).clip(0, 255).int()
-        x = resize_and_pad(x / 255.0, 256)  # 이미지를 256×256 크기로 변경
+        x = x / 255.0
 
         # 입력 영상에서 얼굴 랜드마크 검출 후 적절히 크롭
         if not skip_align:
@@ -157,19 +155,13 @@ class VToonify(nn.Module):
                 ]
 
         with torch.no_grad():
-            I = x.clone().unsqueeze(dim=0).to(self.device)
-
+            I = x.clone().to(self.device)
             if not skip_align:
-                I = (
-                    ((self.align_face(x.permute(1, 2, 0)) - 0.5) / 0.5)
-                    .unsqueeze(dim=0)
-                    .to(self.device)
-                )
-
-            s_w = self.pspencoder(I)
+                I = (self.align_face(x.permute(1, 2, 0)) - 0.5) / 0.5
+            s_w = self.pspencoder(I.unsqueeze(0))
             s_w = self.zplus2wplus(s_w)
 
-            x = ((x - 0.5) / 0.5).unsqueeze(dim=0).to(self.device)
+            x = ((x - 0.5) / 0.5).unsqueeze(0).to(self.device)
             x_p = F.interpolate(
                 self.parsingpredictor(
                     F.interpolate(
@@ -408,35 +400,34 @@ class VToonify(nn.Module):
                 .to("cuda")
             )
             blur = float(qsize * 0.02)
-            kernel = int(4.0 * blur + 0.5)
+            radius = int(4.0 * blur)
 
             img += (
                 TF.gaussian_blur(
                     img,
-                    kernel_size=[kernel + (1 - kernel % 2), kernel + (1 - kernel % 2)],
+                    kernel_size=[2 * radius + 1, 2 * radius + 1],
                     sigma=[blur, blur],
                 )
                 - img
             ) * torch.clip(mask * 3.0 + 1.0, 0.0, 1.0)
-            quad += pad[:2]
             img = torch.clip(img * 255 + 1, 0, 255)
 
             q = torch.tensor(0.5).to("cuda")
-            img += torch.quantile(torch.quantile(img, q, dim=0), q, dim=0) * torch.clip(
-                mask, 0.0, 1.0
-            )
+            img += (
+                torch.quantile(torch.quantile(img, q, dim=0), q, dim=0) - img
+            ) * torch.clip(mask, 0.0, 1.0)
             img = (torch.round(img) + 1).clip(0, 255)
             quad += pad[:2]
 
         # Transform.
         img = TF.resize(img, (output_size, output_size), antialias=True)
         # img = img.transform((transform_size, transform_size), PIL.Image.QUAD, (quad + 0.5).flatten(), PIL.Image.BILINEAR)
-        """
+
         result = Image.fromarray(
             (img.permute(1, 2, 0)).clip(0, 255).detach().cpu().numpy().astype(np.uint8)
         )
         result.save("align_face.png")
-        """
+
         return img
 
     def get_video_crop_parameter(self, img):
