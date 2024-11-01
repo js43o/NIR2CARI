@@ -9,8 +9,6 @@ from utils import *
 import torch
 import torchvision.transforms.functional as F
 
-import torchvision
-
 CARICATURE_MODELS = ["vtoonify", "vtoonify_no_align", "psp"]
 
 

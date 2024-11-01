@@ -65,9 +65,6 @@ class VToonify(nn.Module):
             "models/VToonify/checkpoints/encoder.pt", self.device
         )
 
-        # Decoder 초기화 (StyleGAN2 Generator)
-        self.generator = Generator()
-
         # Encoder 초기화
         self.encoder = nn.ModuleList(
             [
@@ -107,6 +104,9 @@ class VToonify(nn.Module):
             ]
         )
 
+        # Decoder 초기화 (StyleGAN2 Generator)
+        self.generator = Generator()
+
         # Fusion 모듈 초기화
         self.fusion_out = nn.ModuleList(
             [
@@ -137,30 +137,39 @@ class VToonify(nn.Module):
         """
         x = x / 255.0
 
-        # 입력 영상에서 얼굴 랜드마크 검출 후 적절히 크롭
         if not skip_align:
+            # 입력 영상에서 얼굴 랜드마크 검출을 통해 크롭에 필요한 인자들을 계산
             paras = self.get_video_crop_parameter(x.permute(1, 2, 0))
 
             if paras is not None:
                 h, w, top, bottom, left, right, scale = paras
-                # 고해상도 영상에 대해 over-sharpening 방지를 위한 가우시안 블러 적용
+                # 고해상도 영상에 대해 Over-sharpening 현상 방지를 위한 가우시안 블러 적용
                 if scale <= 0.75:
                     x = TF.gaussian_blur(x, [3, 3], [0.5, 0.5])
 
                 x = TF.resize(x, [int(h), int(w)], antialias=True)[
                     :, top:bottom, left:right
-                ]
+                ]  # Crop
 
         with torch.no_grad():
-            I = x.clone().detach().to(self.device)
+            I = (
+                x.clone().detach().to(self.device)
+            )  # '스타일 코드'로 인코딩 될 영상 Tensor의 복제본 생성
             if not skip_align:
+                # 얼굴 랜드마크 검출 결과를 바탕으로 리사이징, 크롭, 패딩 등 다양한 전처리 적용
                 I = self.align_face(x.permute(1, 2, 0))
 
             I = ((I - 0.5) / 0.5).unsqueeze(0).to(self.device)
+
+            # pSp 인코더를 통해 스타일 코드로 한 차례 변환
             s_w = self.pspencoder(I)
+
+            # 기존 잠재 공간 Z+에서 새로운 잠재 공간 W+로 변환 (StyleGAN2)
             s_w = self.zplus2wplus(s_w)
 
             x = ((x - 0.5) / 0.5).unsqueeze(0).to(self.device)
+
+            # 얼굴 구조 변형 안정화를 위한 입력 얼굴 영상의 파싱 맵 생성
             x_p = F.interpolate(
                 self.parsingpredictor(
                     F.interpolate(
@@ -172,10 +181,10 @@ class VToonify(nn.Module):
                 recompute_scale_factor=False,
             ).detach()
 
-            feat = torch.cat((x, x_p / 16.0), dim=1)
-            styles = s_w.repeat(feat.size(0), 1, 1)
+            feat = torch.cat((x, x_p / 16.0), dim=1)  # Featrue Tensor
+            styles = s_w.repeat(feat.size(0), 1, 1)  # Style Tensor
 
-        # encode
+        # Encoding 시작
         feat_0 = self.encoder[0](feat)
         feat_1 = self.encoder[1](feat_0)
         feat_2 = self.encoder[2](feat_1)
@@ -185,7 +194,7 @@ class VToonify(nn.Module):
         out = feat_4
         skip = self.encoder[5](feat_4)
 
-        # decode
+        # Decoding 시작
         f_E = feat_3
         out = self.fusion_out[0](torch.cat([out, f_E], dim=1))
         skip = self.fusion_skip[0](torch.cat([skip, f_E], dim=1))
@@ -269,8 +278,8 @@ class VToonify(nn.Module):
         return landmarks[0]
 
     def align_face(self, img):
-        """입력 얼굴 영상을 상응하는 스타일 벡터(s_w)로 인코딩하기 위한 전처리 함수로써,
-        적절한 리사이징과 크롭을 수행한 후 패딩을 추가하여 반환합니다.
+        """입력 얼굴 영상을 상응하는 스타일 코드(s_w)로 인코딩하기 위한 전처리 함수로써,
+        적절한 리사이징과 크롭 등을 수행한 뒤 반사(Reflection) 패딩을 추가하여 반환합니다.
 
         Args:
             img (torch.Tensor[h, w, c]):
@@ -425,7 +434,8 @@ class VToonify(nn.Module):
         return img
 
     def get_video_crop_parameter(self, img):
-        """입력된 얼굴 영상으로부터 각 얼굴 랜드마크의 좌표를 추론한 뒤, 적절히 크롭하기 위해 필요한 인자 값들을 반환합니다.
+        """입력된 얼굴 영상으로부터 각 얼굴 랜드마크의 좌표를 추론한 뒤,
+        적절히 크롭하기 위해 필요한 7개의 크롭 인자 값들을 반환합니다.
 
         Args:
             img (Tensor[c, h, w]):
