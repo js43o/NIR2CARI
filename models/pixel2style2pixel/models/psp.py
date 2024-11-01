@@ -17,7 +17,8 @@ class pSp(nn.Module):
         self.face_pool = torch.nn.AdaptiveAvgPool2d((1024, 1024))
 
     def forward(self, x):
-        x = resize_and_pad(x, 256)
+        x = (resize_and_pad(x, 256).float() / 255.0).clip(0, 1).unsqueeze(0)
+        x = (x - 0.5) / 0.5
         codes = self.encoder(x)
         images = self.decoder([codes])
         images = self.face_pool(images)

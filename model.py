@@ -80,10 +80,6 @@ class NIR2CARI(torch.nn.Module):
         if self.caricature_model.startswith("vtoonify"):
             # 얼굴 랜드마크 검출 및 입력 영상 정렬 단계 생략 여부
             skip_align = "no_align" in self.caricature_model
-            """ 임시 코드
-            print("$ import test image")
-            colorized = torchvision.io.read_image("test.jpg").to("cuda")
-            """
             caricatured = self.vtoonify(colorized, skip_align).squeeze()
         elif self.caricature_model == "psp":
             caricatured = self.pSp(colorized)[0]
