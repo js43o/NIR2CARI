@@ -16,7 +16,7 @@ def load(caricature_model: str = "vtoonify"):
     model = torch.jit.load("torchscripts/nir2cari_%s.pt" % caricature_model)
 
     # 테스트용 샘플 이미지
-    filename = "Anthony_Garotinho_0001.jpg"
+    filename = "Bill_Clinton_0023.jpg"
 
     image = cv2.imread("dataset_/%s" % filename)
     image = torch.tensor(image).permute(2, 0, 1).unsqueeze(0).float()

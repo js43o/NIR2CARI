@@ -10,9 +10,6 @@ from ..model.encoder.encoders.psp_encoders import GradualStyleEncoder
 from models.landmarker.model.landmarker import Landmarker
 from torchvision.transforms import functional as TF
 
-from PIL import Image
-import numpy as np
-
 
 def load_psp_standalone(checkpoint_path, device="cuda"):
     psp = GradualStyleEncoder()
@@ -399,9 +396,10 @@ class VToonify(nn.Module):
                 .permute(2, 0, 1)
                 .to("cuda")
             )
+
             blur = float(qsize * 0.02)
             radius = int(4.0 * blur)
-
+            img = torch.clip(img * 255.0 + 1, 0.0, 255.0)
             img += (
                 TF.gaussian_blur(
                     img,
@@ -410,23 +408,17 @@ class VToonify(nn.Module):
                 )
                 - img
             ) * torch.clip(mask * 3.0 + 1.0, 0.0, 1.0)
-            img = torch.clip(img * 255 + 1, 0, 255)
 
             q = torch.tensor(0.5).to("cuda")
             img += (
                 torch.quantile(torch.quantile(img, q, dim=0), q, dim=0) - img
             ) * torch.clip(mask, 0.0, 1.0)
-            img = (torch.round(img) + 1).clip(0, 255)
+            img = torch.clip(torch.round(img) / 255.0, 0.0, 1.0)
             quad += pad[:2]
 
         # Transform.
         img = TF.resize(img, (output_size, output_size), antialias=True)
         # img = img.transform((transform_size, transform_size), PIL.Image.QUAD, (quad + 0.5).flatten(), PIL.Image.BILINEAR)
-
-        result = Image.fromarray(
-            (img.permute(1, 2, 0)).clip(0, 255).detach().cpu().numpy().astype(np.uint8)
-        )
-        result.save("align_face.png")
 
         return img
 
