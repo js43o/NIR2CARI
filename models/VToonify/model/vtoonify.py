@@ -152,10 +152,12 @@ class VToonify(nn.Module):
                 ]
 
         with torch.no_grad():
-            I = x.clone().to(self.device)
+            I = x.clone().detach().to(self.device)
             if not skip_align:
-                I = (self.align_face(x.permute(1, 2, 0)) - 0.5) / 0.5
-            s_w = self.pspencoder(I.unsqueeze(0))
+                I = self.align_face(x.permute(1, 2, 0))
+
+            I = ((I - 0.5) / 0.5).unsqueeze(0).to(self.device)
+            s_w = self.pspencoder(I)
             s_w = self.zplus2wplus(s_w)
 
             x = ((x - 0.5) / 0.5).unsqueeze(0).to(self.device)
