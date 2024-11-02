@@ -60,7 +60,7 @@ class VToonify(nn.Module):
         )
         self.parsingpredictor.to(self.device).eval()
 
-        # 스타일 벡터 Encoder 초기화
+        # 스타일 코드 Encoder 초기화
         self.pspencoder = load_psp_standalone(
             "models/VToonify/checkpoints/encoder.pt", self.device
         )
@@ -108,6 +108,7 @@ class VToonify(nn.Module):
         self.generator = Generator()
 
         # Fusion 모듈 초기화
+        # Decoding 단계에서 Generator의 Featrues와 Encoder로부터 전달된 Features를 합치는 역할
         self.fusion_out = nn.ModuleList(
             [
                 nn.Conv2d(1024, 512, 3, 1, 1, bias=True),
@@ -149,27 +150,27 @@ class VToonify(nn.Module):
 
                 x = TF.resize(x, [int(h), int(w)], antialias=True)[
                     :, top:bottom, left:right
-                ]  # Crop
+                ]  # 크롭 적용
 
         with torch.no_grad():
             I = (
                 x.clone().detach().to(self.device)
-            )  # '스타일 코드'로 인코딩 될 영상 Tensor의 복제본 생성
+            )  # 스타일 코드로 인코딩 될 입력 영상 복제본 생성
             if not skip_align:
                 # 얼굴 랜드마크 검출 결과를 바탕으로 리사이징, 크롭, 패딩 등 다양한 전처리 적용
                 I = self.align_face(x.permute(1, 2, 0))
 
-            I = ((I - 0.5) / 0.5).unsqueeze(0).to(self.device)
+            I = ((I - 0.5) / 0.5).unsqueeze(0).to(self.device)  # Normalization
 
-            # pSp 인코더를 통해 스타일 코드로 한 차례 변환
+            # pSp 인코더를 통해 스타일 코드로 변환
             s_w = self.pspencoder(I)
 
-            # 기존 잠재 공간 Z+에서 새로운 잠재 공간 W+로 변환 (StyleGAN2)
+            # 기존 Latent space Z+에서 새로운 Latent space W+로 변환 (StyleGAN2)
             s_w = self.zplus2wplus(s_w)
 
-            x = ((x - 0.5) / 0.5).unsqueeze(0).to(self.device)
+            x = ((x - 0.5) / 0.5).unsqueeze(0).to(self.device)  # Normalization
 
-            # 얼굴 구조 변형 안정화를 위한 입력 얼굴 영상의 파싱 맵 생성
+            # 안정적인 얼굴 구조 변형을 위한 입력 얼굴 영상의 파싱 맵 생성
             x_p = F.interpolate(
                 self.parsingpredictor(
                     F.interpolate(
@@ -181,10 +182,10 @@ class VToonify(nn.Module):
                 recompute_scale_factor=False,
             ).detach()
 
-            feat = torch.cat((x, x_p / 16.0), dim=1)  # Featrue Tensor
-            styles = s_w.repeat(feat.size(0), 1, 1)  # Style Tensor
+            feat = torch.cat((x, x_p / 16.0), dim=1)  # Featrues (input + parsing map)
+            styles = s_w.repeat(feat.size(0), 1, 1)  # Style condition
 
-        # Encoding 시작
+        # Encoding 단계 시작
         feat_0 = self.encoder[0](feat)
         feat_1 = self.encoder[1](feat_0)
         feat_2 = self.encoder[2](feat_1)
@@ -194,10 +195,9 @@ class VToonify(nn.Module):
         out = feat_4
         skip = self.encoder[5](feat_4)
 
-        # Decoding 시작
-        f_E = feat_3
-        out = self.fusion_out[0](torch.cat([out, f_E], dim=1))
-        skip = self.fusion_skip[0](torch.cat([skip, f_E], dim=1))
+        # Decoding 단계 시작
+        out = self.fusion_out[0](torch.cat([out, feat_3], dim=1))
+        skip = self.fusion_skip[0](torch.cat([skip, feat_3], dim=1))
         noise = (
             x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
             .normal_()
@@ -206,76 +206,64 @@ class VToonify(nn.Module):
         )
 
         out = self.generator.convs[6](out, styles[:, 7])
-
         out = self.generator.convs[7](out, styles[:, 8], noise=noise)
         skip = self.generator.to_rgbs[3](out, styles[:, 9], skip)
 
-        f_E = feat_2
-        out = self.fusion_out[1](torch.cat([out, f_E], dim=1))
-        skip = self.fusion_skip[1](torch.cat([skip, f_E], dim=1))
+        out = self.fusion_out[1](torch.cat([out, feat_2], dim=1))
+        skip = self.fusion_skip[1](torch.cat([skip, feat_2], dim=1))
         noise = (
             x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
             .normal_()
             .detach()
             * 0.0
         )
+
         out = self.generator.convs[8](out, styles[:, 9], noise=noise)
         out = self.generator.convs[9](out, styles[:, 10], noise=noise)
         skip = self.generator.to_rgbs[4](out, styles[:, 11], skip)
 
-        f_E = feat_1
-        out = self.fusion_out[2](torch.cat([out, f_E], dim=1))
-        skip = self.fusion_skip[2](torch.cat([skip, f_E], dim=1))
+        out = self.fusion_out[2](torch.cat([out, feat_1], dim=1))
+        skip = self.fusion_skip[2](torch.cat([skip, feat_1], dim=1))
         noise = (
             x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
             .normal_()
             .detach()
             * 0.0
         )
+
         out = self.generator.convs[10](out, styles[:, 11], noise=noise)
         out = self.generator.convs[11](out, styles[:, 12], noise=noise)
         skip = self.generator.to_rgbs[5](out, styles[:, 13], skip)
 
-        f_E = feat_0
-        out = self.fusion_out[3](torch.cat([out, f_E], dim=1))
-        skip = self.fusion_skip[3](torch.cat([skip, f_E], dim=1))
+        out = self.fusion_out[3](torch.cat([out, feat_0], dim=1))
+        skip = self.fusion_skip[3](torch.cat([skip, feat_0], dim=1))
         noise = (
             x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
             .normal_()
             .detach()
             * 0.0
         )
+
         out = self.generator.convs[12](out, styles[:, 13], noise=noise)
         out = self.generator.convs[13](out, styles[:, 14], noise=noise)
         skip = self.generator.to_rgbs[6](out, styles[:, 15], skip)
-
         noise = (
             x.new_empty(out.shape[0], 1, out.shape[2] * 2, out.shape[3] * 2)
             .normal_()
             .detach()
             * 0.0
         )
+
         out = self.generator.convs[14](out, styles[:, 15], noise=noise)
         out = self.generator.convs[15](out, styles[:, 16], noise=noise)
         skip = self.generator.to_rgbs[7](out, styles[:, 17], skip)
 
-        image = skip
-
-        return image
+        return skip
 
     def zplus2wplus(self, zplus):
         return self.generator.style(
             zplus.reshape(zplus.shape[0] * zplus.shape[1], zplus.shape[2])
         ).reshape(zplus.shape)
-
-    ########## image alignment methods ##########
-
-    def get_landmark(self, img):
-        landmarks = self.landmarkpredictor(img * 255.0)
-        if landmarks is None:
-            return None
-
-        return landmarks[0]
 
     def align_face(self, img):
         """입력 얼굴 영상을 상응하는 스타일 코드(s_w)로 인코딩하기 위한 전처리 함수로써,
@@ -287,17 +275,16 @@ class VToonify(nn.Module):
         Returns:
             img (torch.Tensor[h, w, c]):
         """
-        lm = self.get_landmark(img)
+        lm = self.landmarkpredictor(img * 255.0)  # 랜드마크 검출 모델 호출
         if lm is None:
             return img
 
-        lm = lm.detach().cpu()
+        lm = lm[0]
+        lm_eye_left = lm[36:42]
+        lm_eye_right = lm[42:48]
+        lm_mouth_outer = lm[48:60]
 
-        lm_eye_left = lm[36:42]  # left-clockwise
-        lm_eye_right = lm[42:48]  # left-clockwise
-        lm_mouth_outer = lm[48:60]  # left-clockwise
-
-        # Calculate auxiliary vectors.
+        # 각 얼굴 랜드마크 지점 간 거리 계산
         eye_left = torch.mean(lm_eye_left, dim=0)
         eye_right = torch.mean(lm_eye_right, dim=0)
         eye_avg = (eye_left + eye_right) * 0.5
@@ -307,21 +294,20 @@ class VToonify(nn.Module):
         mouth_avg = (mouth_left + mouth_right) * 0.5
         eye_to_mouth = mouth_avg - eye_avg
 
-        # Choose oriented crop rectangle.
-        x = eye_to_eye - torch.flipud(eye_to_mouth) * torch.tensor([-1, 1])
+        # 직사각형의 크롭 영역 산출
+        x = eye_to_eye - torch.flipud(eye_to_mouth) * torch.tensor([-1, 1]).to("cuda")
         x /= torch.hypot(x[0], x[1])
         x *= torch.max(
             torch.hypot(eye_to_eye[0], eye_to_eye[1]) * 2.0,
             torch.hypot(eye_to_mouth[0], eye_to_mouth[1]) * 1.8,
         )
-        y = torch.flipud(x) * torch.tensor([-1, 1])
+        y = torch.flipud(x) * torch.tensor([-1, 1]).to("cuda")
         c = eye_avg + eye_to_mouth * 0.1
         quad = torch.stack([c - x - y, c - x + y, c + x + y, c + x - y])
         qsize = torch.hypot(x[0], x[1]) * 2
 
+        # 축소 적용
         output_size = 256
-
-        # Shrink.
         shrink = int(torch.floor(qsize / output_size * 0.5))
         if shrink > 1:
             rsize = (
@@ -332,7 +318,7 @@ class VToonify(nn.Module):
             quad /= shrink
             qsize /= shrink
 
-        # Crop.
+        # 크롭 적용
         border = torch.max((torch.round(qsize * 0.1)), torch.tensor(3))
         crop = [
             torch.floor(torch.min(quad[:, 0])),
@@ -360,7 +346,7 @@ class VToonify(nn.Module):
             ).permute(1, 2, 0)
             quad -= torch.tensor([crop[1], crop[0]])
 
-        # Pad.
+        # 패딩 추가
         pad = (
             int(torch.floor(torch.min(quad[:, 0]))),
             int(torch.floor(torch.min(quad[:, 1]))),
@@ -389,8 +375,8 @@ class VToonify(nn.Module):
             )
 
             _, h, w = img.shape
-            y = torch.arange(h).view(-1, 1, 1)  # Shape: (h, 1, 1)
-            x = torch.arange(w).view(1, -1, 1)  # Shape: (1, w, 1)
+            y = torch.arange(h).view(-1, 1, 1).to("cuda")  # Shape: (h, 1, 1)
+            x = torch.arange(w).view(1, -1, 1).to("cuda")  # Shape: (1, w, 1)
             mask = (
                 torch.maximum(
                     1.0
@@ -408,6 +394,7 @@ class VToonify(nn.Module):
                 .to("cuda")
             )
 
+            # 가우시안 블러 적용
             blur = float(qsize * 0.02)
             radius = int(4.0 * blur)
             img = torch.clip(img * 255.0 + 1, 0.0, 255.0)
@@ -425,11 +412,9 @@ class VToonify(nn.Module):
                 torch.quantile(torch.quantile(img, q, dim=0), q, dim=0) - img
             ) * torch.clip(mask, 0.0, 1.0)
             img = torch.clip(torch.round(img) / 255.0, 0.0, 1.0)
-            quad += pad[:2]
 
-        # Transform.
+        # 최종 영상 크기인 256px로 리사이징
         img = TF.resize(img, (output_size, output_size), antialias=True)
-        # img = img.transform((transform_size, transform_size), PIL.Image.QUAD, (quad + 0.5).flatten(), PIL.Image.BILINEAR)
 
         return img
 
@@ -441,14 +426,14 @@ class VToonify(nn.Module):
             img (Tensor[c, h, w]):
 
         Returns:
-            coords (Tuple(int, int, int, int, int, int, float)): h, w, top, bottom, left, right, scale
+            coords (Tuple[int, int, int, int, int, int, float]): h, w, top, bottom, left, right, scale
         """
-        lm = self.get_landmark(img)
+        lm = self.landmarkpredictor(img * 255.0)  # 랜드마크 검출 모델 호출
         if lm is None:
             return None
 
-        lm_eye_left = lm[36:42]  # left-clockwise
-        lm_eye_right = lm[42:48]  # left-clockwise
+        lm_eye_left = lm[0][36:42]  # left-clockwise
+        lm_eye_right = lm[0][42:48]  # left-clockwise
         padding = [200, 200, 200, 200]
 
         scale = 64.0 / (torch.mean(lm_eye_right[:, 0]) - torch.mean(lm_eye_left[:, 0]))
