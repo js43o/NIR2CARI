@@ -2,7 +2,7 @@ import os
 import sys
 import errno
 import torch
-from typing import List, Optional
+from typing import Optional
 from torchvision.transforms import functional as F, InterpolationMode
 
 from urllib.parse import urlparse

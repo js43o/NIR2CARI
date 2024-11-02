@@ -6,6 +6,7 @@ import os
 import torch
 import argparse
 from PIL import Image
+from time import time
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -32,12 +33,15 @@ if __name__ == "__main__":
 
     print("▶ Loading models...")
     nir2cari = NIR2CARI(options["caricature_model"])
+    time_prev = time()
 
     for i, data in enumerate(dataset):
         image = data["label"]
         filename = os.path.basename(data["path"][0]).split(".")[0]
 
         result = nir2cari(image)
+        print("▷ %s (%d ms)" % (filename, int((time() - time_prev) * 1000)))
+        time_prev = time()
 
         result = Image.fromarray(result.detach().cpu().numpy().astype(np.uint8))
         result.save("%s/%s.png" % (options["output"], filename))

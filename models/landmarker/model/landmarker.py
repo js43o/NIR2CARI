@@ -1,5 +1,3 @@
-import numpy as np
-from PIL import Image
 from torch import nn
 
 from models.landmarker.model.detection.blazeface import FaceDetector

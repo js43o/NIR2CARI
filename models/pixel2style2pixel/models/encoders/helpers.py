@@ -1,5 +1,3 @@
-from collections import namedtuple
-import torch
 from torch.nn import (
     Conv2d,
     BatchNorm2d,
