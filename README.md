@@ -17,7 +17,7 @@ A caricature generator from near-infrared (NIR) face images
 2. `conda activate nir2cari` 명령어로 방금 생성한 가상환경을 활성화합니다.
 3. 프로젝트 루트 경로에서 `pip install -r requirements.txt` 명령을 통해 나머지 패키지들을 설치합니다.
 
-## 실행 방법
+## 실행 방법 (기본 인자 기준)
 ### Inference
 1. `dataset` 폴더에 입력 데이터로 사용할 NIR 이미지를 삽입합니다.
 2. `python run` 명령을 입력하여 모델 추론을 실행합니다.
@@ -27,7 +27,7 @@ A caricature generator from near-infrared (NIR) face images
 - `--dataroot`: 입력 NIR 얼굴 영상 파일이 포함된 디렉토리 경로
 - `--output`: 출력 캐리커처 얼굴 영상 파일을 저장할 디렉토리 경로
 - `--caricature_model`: 캐리커처 초안 생성 모델로 어떤 베이스 모델을 사용할지 지정
-  - `"vtoonify"`: **VToonify**, 상업적 라이센스 존재, 얼굴 랜드마크 검출 및 입력 영상 정렬 과정 포함 (높은 품질, 낮은 속도)
+  - `"vtoonify"`: **VToonify**, 상업적 라이센스 존재, 얼굴 랜드마크 검출 및 입력 영상 정렬 과정 포함 (높은 품질, 낮은 속도) (**default**)
   - `"vtoonify_no_align"`: **VToonify**, 상업적 라이센스 존재, 얼굴 랜드마크 검출 및 입력 영상 정렬 과정 생략 (높은 속도, 보통 품질)
   - `"psp"`: **pixel2style2pixel**, 라이센스 제약 없음 (높은 속도, 낮은 품질)
 - **실행 예시**
