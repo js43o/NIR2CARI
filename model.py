@@ -9,7 +9,7 @@ from utils import *
 import torch
 import torchvision.transforms.functional as F
 
-CARICATURE_MODELS = ["vtoonify", "vtoonify_no_align", "psp"]
+CARICATURE_MODELS = ["vtoonify", "vtoonify_no_align", "psp", "pixel2style2pixel"]
 
 
 class NIR2CARI(torch.nn.Module):
@@ -79,7 +79,10 @@ class NIR2CARI(torch.nn.Module):
             # 얼굴 랜드마크 검출 및 입력 영상 정렬 단계 생략 여부
             skip_align = "no_align" in self.caricature_model
             caricatured = self.vtoonify(colorized, skip_align).squeeze()
-        elif self.caricature_model == "psp":
+        elif (
+            self.caricature_model == "psp"
+            or self.caricature_model == "pixel2style2pixel"
+        ):
             caricatured = self.pSp(colorized)[0]
         else:
             # 지정된 캐리커처 변환 모델이 없을 경우, Inference 중단 후 RGB Colorized 결과물 반환

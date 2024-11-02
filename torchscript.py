@@ -29,5 +29,5 @@ def load(caricature_model: str = "vtoonify"):
     print("LOAD & INFERENCE COMPLETED")
 
 
-save("vtoonify_no_align")
-load("vtoonify_no_align")
+save("psp")
+load("psp")
