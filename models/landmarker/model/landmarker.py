@@ -10,7 +10,9 @@ class Landmarker(nn.Module):
         self.device = "cuda"
         self.face_detector = FaceDetector(device=self.device)
         self.face_alignment_net = torch.jit.load(
-            load_file_from_url("models/landmarker/checkpoints/2DFAN4-cd938726ad.zip")
+            load_file_from_url(
+                "https://www.adrianbulat.com/downloads/python-fan/2DFAN4-cd938726ad.zip"
+            )
         )
         self.face_alignment_net.to(self.device, dtype=torch.float32)
         self.face_alignment_net.eval()
