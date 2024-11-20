@@ -344,7 +344,7 @@ class VToonify(nn.Module):
                 crop[3],
                 crop[2],
             ).permute(1, 2, 0)
-            quad -= torch.tensor([crop[1], crop[0]])
+            quad -= torch.tensor([crop[1], crop[0]]).to("cuda")
 
         # 패딩 추가
         pad = (
