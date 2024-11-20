@@ -166,6 +166,8 @@ class VToonify(nn.Module):
 
             # pSp 인코더를 통해 스타일 코드로 변환
             s_w = self.pspencoder(I)
+            if s_w.shape[0] > 1:
+                s_w = s_w[0, ...].unsqueeze(0)
 
             # 기존 Latent space Z+에서 새로운 Latent space W+로 변환 (StyleGAN2)
             s_w = self.zplus2wplus(s_w)
