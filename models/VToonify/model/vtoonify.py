@@ -158,7 +158,9 @@ class VToonify(nn.Module):
             )  # 스타일 코드로 인코딩 될 입력 영상 복제본 생성
             if not skip_align:
                 # 얼굴 랜드마크 검출 결과를 바탕으로 리사이징, 크롭, 패딩 등 다양한 전처리 적용
-                I = self.align_face(x.permute(1, 2, 0))
+                aligned = self.align_face(x.permute(1, 2, 0))
+                if aligned is not None:
+                    I = aligned
 
             I = ((I - 0.5) / 0.5).unsqueeze(0).to(self.device)  # Normalization
 
@@ -276,8 +278,8 @@ class VToonify(nn.Module):
             img (torch.Tensor[h, w, c]):
         """
         lm = self.landmarkpredictor(img * 255.0)  # 랜드마크 검출 모델 호출
-        if lm is None:
-            return img
+        if lm is not None:
+            return None
 
         lm = lm[0]
         lm_eye_left = lm[36:42]
