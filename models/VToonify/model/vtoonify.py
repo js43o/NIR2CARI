@@ -278,7 +278,7 @@ class VToonify(nn.Module):
             img (torch.Tensor[h, w, c]):
         """
         lm = self.landmarkpredictor(img * 255.0)  # 랜드마크 검출 모델 호출
-        if lm is not None:
+        if lm is None:
             return None
 
         lm = lm[0]
