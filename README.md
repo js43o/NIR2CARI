@@ -7,7 +7,7 @@ A caricature generator from near-infrared (NIR) face images
 - CycleGAN (https://github.com/eriklindernoren/PyTorch-GAN)
 
 ## 실행 환경
-- RTX 3080 Ti (12GB VRAM)
+- RTX 3080 Ti (12GB VRAM) 또는 RTX 4090 (24GB VRAM)
 - **CUDA 11.8**
 - Python 3.8
 - Pytorch 2.0.0
@@ -28,7 +28,7 @@ A caricature generator from near-infrared (NIR) face images
 - `--output`: 출력 캐리커처 얼굴 영상 파일을 저장할 디렉토리 경로
 - `--caricature_model`: 캐리커처 초안 생성 모델로 어떤 베이스 모델을 사용할지 지정
   - `"vtoonify"`: **VToonify**, 상업적 라이센스 존재, 얼굴 랜드마크 검출 및 입력 영상 정렬 과정 포함 (높은 품질, 낮은 속도) (**default**)
-  - `"vtoonify_no_align"`: **VToonify**, 상업적 라이센스 존재, 얼굴 랜드마크 검출 및 입력 영상 정렬 과정 생략 (높은 속도, 보통 품질)
-  - `"psp"`: **pixel2style2pixel**, 라이센스 제약 없음 (높은 속도, 낮은 품질)
+  - `"vtoonify_no_align"`: **VToonify**, 상업적 라이센스 존재, 얼굴 랜드마크 검출 및 입력 영상 정렬 과정 생략 (높은 속도, 높은 품질(정렬된 영상일 경우) 또는 낮은 품질(정렬되지 않은 영상일 경우))
+  - `"psp"`: **pixel2style2pixel**, 라이센스 제약 없음 (높은 속도, 보통 품질(정렬된 영상일 경우) 또는 낮은 품질(정렬되지 않은 영상일 경우))
 - **실행 예시**
   `python run.py --dataroot ./nir_images --output ./cari_images caricature_model psp`
