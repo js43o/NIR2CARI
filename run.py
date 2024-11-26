@@ -33,15 +33,20 @@ if __name__ == "__main__":
 
     print("▶ Loading models...")
     nir2cari = NIR2CARI(options["caricature_model"])
-    time_prev = time()
+
+    dataset_len = len(dataset)
 
     for i, data in enumerate(dataset):
         image = data["label"]
         filename = os.path.basename(data["path"][0]).split(".")[0]
 
-        result = nir2cari(image)
-        print("▷ %s (%d ms)" % (filename, int((time() - time_prev) * 1000)))
         time_prev = time()
+        result = nir2cari(image)
+
+        print(
+            "▷ %s (%d ms) (%d/%d)"
+            % (filename, int((time() - time_prev) * 1000), i + 1, dataset_len)
+        )
 
         result = Image.fromarray(result.detach().cpu().numpy().astype(np.uint8))
         result.save("%s/%s.png" % (options["output"], filename))
