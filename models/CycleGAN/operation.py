@@ -11,7 +11,6 @@ class DemodulatedConv2d(nn.Module):
         kernel_size=3,
         stride=1,
         padding=0,
-        bias=False,
         dilation=1,
         batch_size=1,
     ):
@@ -25,9 +24,6 @@ class DemodulatedConv2d(nn.Module):
         self.weight = nn.Parameter(
             torch.randn(batch_size, out_channel, in_channel, kernel_size, kernel_size)
         )
-        self.bias = None
-        if bias:
-            self.bias = nn.Parameter(torch.randn(out_channel))
 
         self.stride = stride
         self.padding = padding
@@ -44,25 +40,14 @@ class DemodulatedConv2d(nn.Module):
         )
 
         input = input.view(1, batch * in_channel, height, width)
-        if self.bias is None:
-            out = F.conv2d(
-                input,
-                weight,
-                padding=self.padding,
-                groups=batch,
-                dilation=self.dilation,
-                stride=self.stride,
-            )
-        else:
-            out = F.conv2d(
-                input,
-                weight,
-                bias=self.bias,
-                padding=self.padding,
-                groups=batch,
-                dilation=self.dilation,
-                stride=self.stride,
-            )
+        out = F.conv2d(
+            input,
+            weight,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=batch,
+        )
         _, _, height, width = out.shape
         out = out.view(batch, self.out_channel, height, width)
 

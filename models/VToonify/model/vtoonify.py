@@ -416,8 +416,10 @@ class VToonify(nn.Module):
                 torch.quantile(torch.quantile(img, q, dim=0), q, dim=0) - img
             ) * torch.clip(mask, 0.0, 1.0)
             img = torch.clip(torch.round(img) / 255.0, 0.0, 1.0)
+            img = img.permute(1, 2, 0)
 
         # 최종 영상 크기인 256px로 리사이징
+        img = img.permute(2, 0, 1)
         img = TF.resize(img, (output_size, output_size), antialias=True)
 
         return img
