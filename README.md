@@ -1,5 +1,5 @@
 # NIR2CARI
-A caricature generator from near-infrared (NIR) face images
+A caricature generation model from near-infrared (NIR) facial images.
 
 ## 사용된 Base Model 목록
 - pix2pixHD (https://github.com/NVIDIA/pix2pixHD)
