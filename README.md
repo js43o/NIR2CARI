@@ -20,15 +20,15 @@ A caricature generation model from near-infrared (NIR) facial images.
 ## 실행 방법 (기본 인자 기준)
 ### Inference
 1. `dataset` 폴더에 입력 데이터로 사용할 NIR 이미지를 삽입합니다.
-2. `python run` 명령을 입력하여 모델 추론을 실행합니다.
+2. `python run.py` 명령을 입력하여 모델 추론을 실행합니다.
 3. `output` 폴더에 변환된 캐리커처 이미지가 출력됩니다.
 
 ### 실행 인자
 - `--dataroot`: 입력 NIR 얼굴 영상 파일이 포함된 디렉토리 경로
 - `--output`: 출력 캐리커처 얼굴 영상 파일을 저장할 디렉토리 경로
 - `--caricature_model`: 캐리커처 초안 생성 모델로 어떤 베이스 모델을 사용할지 지정
-  - `"vtoonify"`: **VToonify**, 상업적 라이센스 존재, 얼굴 랜드마크 검출 및 입력 영상 정렬 과정 포함 (높은 품질, 낮은 속도) (**default**)
-  - `"vtoonify_no_align"`: **VToonify**, 상업적 라이센스 존재, 얼굴 랜드마크 검출 및 입력 영상 정렬 과정 생략 (높은 속도, 높은 품질(정렬된 영상일 경우) 또는 낮은 품질(정렬되지 않은 영상일 경우))
-  - `"psp"`: **pixel2style2pixel**, 라이센스 제약 없음 (높은 속도, 보통 품질(정렬된 영상일 경우) 또는 낮은 품질(정렬되지 않은 영상일 경우))
+  - `"vtoonify"`: **VToonify**, 높은 품질, 낮은 속도 (**default**)
+  - `"vtoonify_no_align"`: **VToonify**, 높은 속도, 높은 품질(정렬된 영상일 경우) 또는 낮은 품질(정렬되지 않은 영상일 경우)
+  - `"psp"`: **pixel2style2pixel**, 높은 속도, 보통 품질(정렬된 영상일 경우) 또는 낮은 품질(정렬되지 않은 영상일 경우)
 - **실행 예시**
   `python run.py --dataroot ./nir_images --output ./cari_images caricature_model psp`
